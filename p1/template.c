@@ -13,7 +13,7 @@ void infinite_loop() {
 }
 
 void slow_process() {
-    sleep(5 * L);  // Sleep for 10 seconds, simulating a slow process
+    sleep(2 * L);  // Sleep for 10 seconds, simulating a slow process
 }
 
 int main(int argc, char *argv[]) {
