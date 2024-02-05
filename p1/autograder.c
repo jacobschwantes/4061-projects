@@ -1,8 +1,11 @@
 #include "include/utility.h"
+#include <libgen.h>
 
-#define MAX_LENGTH 500
+#define MAX_LENGTH 256
+#define MAX_SUBMISSIONS 25 /* max number of executables (tests) */
 
-void appendstr(char outputs[][MAX_LENGTH], char string[], int index)
+// append return status of a process to outputs
+void append_status(char outputs[][MAX_LENGTH], char string[], int index)
 {
     if (strlen(outputs[index]) + strlen(string) < MAX_LENGTH)
     {
@@ -10,47 +13,56 @@ void appendstr(char outputs[][MAX_LENGTH], char string[], int index)
     }
 }
 
+// reads list of executables into memory
+int read_submissions(char paths[][MAX_LENGTH])
+{
+
+    FILE *F = fopen("submission.txt", "r");
+
+    if (F == NULL)
+    {
+        perror("Error opening file");
+        return -1;
+    };
+
+    char buffer[MAX_LENGTH];
+    int count = 0;
+
+    while (fgets(buffer, MAX_LENGTH, F) != NULL && count < MAX_SUBMISSIONS)
+    {
+        buffer[strcspn(buffer, "\n")] = 0;
+        strncpy(paths[count], buffer, MAX_LENGTH);
+        count++;
+    }
+    fclose(F);
+    return count;
+}
+
 int main(int argc, char *argv[])
 {
-    const int B = atoi(argv[1]);
-    char outputs[B][MAX_LENGTH];
-    int params = argc - 2;
+    const int BATCH_SIZE = atoi(argv[1]);
+    char exec_paths[MAX_SUBMISSIONS][MAX_LENGTH];
+    const int submission_count = read_submissions(exec_paths);
+    const int PARAMS = argc - 2;
+    char outputs[MAX_SUBMISSIONS][MAX_LENGTH];
     int params_offset = 2;
 
-    for (int i = 0; i < B; ++i)
+    // initialize outputs array
+    for (int i = 0; i < BATCH_SIZE; ++i)
     {
         outputs[i][0] = '\0';
     }
 
     while (params_offset < argc)
     {
-        char exec_path[100];
-        FILE *f;
-        f = fopen("submission.txt", "r");
-
-        if (f == NULL)
+        int processed_count = 0;
+        // need to run another batch with same test input if submission count exceeds batch size
+        while (submission_count > processed_count)
         {
-            perror("Error opening file");
-            return -1;
-        };
-        int batch_size = B;
+            pid_t pids[BATCH_SIZE];
 
-        printf("starting param: %s\n", argv[params_offset]);
-        // while (fgets(exec_path, 100, f) != NULL)
-        // {
-
-        if (params < batch_size)
-        {
-            batch_size = params;
-        }
-        pid_t pids[batch_size];
-
-        for (int i = 0; i < batch_size; i++)
-        {
-            if (fgets(exec_path, 100, f) != NULL)
+            for (int i = 0; i < BATCH_SIZE; i++)
             {
-                exec_path[strcspn(exec_path, "\n")] = 0;
-                printf("starting exec: %s\n", exec_path);
                 if ((pids[i] = fork()) < 0)
                 {
                     perror("failed to fork");
@@ -58,214 +70,166 @@ int main(int argc, char *argv[])
                 }
                 else if (pids[i] == 0)
                 {
-                    char *args[] = {exec_path, argv[params_offset], (char *)0};
-                    printf("spawning child with pid:%d\n", getpid());
-                    execv(args[0], args);
+                    execl(exec_paths[i], basename(exec_paths[i + processed_count]), argv[params_offset], (char *)0);
                     perror("failed to execute");
                     exit(1);
                 }
             }
-        }
 
-        /* Parent code */
-        int status;
-        pid_t pid;
+            /* Parent Code */
+            int status;
+            pid_t pid;
 
-        int count = 0;
-        // check every second for child status updates until slow child finishes
-        while (count <= 11)
-        {
-            pid = waitpid(-1, &status, WNOHANG);
-
-            if (pid == -1)
+            int count = 0;
+            // check every second for child status updates until slow child finishes
+            while (count <= (L * 2) + 1)
             {
-                /* an error other than an interrupted system call */
-                perror("waitpid");
-                return 0;
-            }
-            else if (pid != 0)
-            {
-                if (WIFEXITED(status)) /* process exited normally */
+                pid = waitpid(-1, &status, WNOHANG);
+
+                if (pid == -1)
                 {
-                    for (int i = 0; i < batch_size; i++)
+                    /* an error other than an interrupted system call */
+                    perror("waitpid");
+                    return 0;
+                }
+                else if (pid != 0)
+                {
+                    if (WIFEXITED(status)) /* process exited normally */
                     {
-                        if (pids[i] == pid)
+                        for (int i = 0; i < BATCH_SIZE; i++)
                         {
-                            switch (WEXITSTATUS(status))
+                            if (pids[i] == pid)
                             {
-                            case 1:
-                                appendstr(outputs, "I", i);
-                                break;
-                            case 0:
-                                if (count > (L * 2))
+                                switch (WEXITSTATUS(status))
                                 {
-                                    appendstr(outputs, "S", i);
+                                case 1:
+                                    append_status(outputs, "I", i + processed_count);
+                                    break;
+                                case 0:
+                                    if (count > (L * 2))
+                                    {
+                                        append_status(outputs, "S", i + processed_count);
+                                    }
+                                    else
+                                    {
+                                        append_status(outputs, "C", i + processed_count);
+                                    }
+                                    break;
+                                default:
+                                    break;
                                 }
-                                else
-                                {
-                                    appendstr(outputs, "C", i);
-                                }
-                                break;
-                            default:
-                                break;
                             }
                         }
                     }
-                    printf("child process %d exited with value %d\n", pid, WEXITSTATUS(status));
-                }
-                else if (WIFSIGNALED(status))
-                {
-                    for (int i = 0; i < batch_size; i++)
+                    else if (WIFSIGNALED(status)) /* process excited by signal */
                     {
-                        if (pids[i] == pid)
+                        for (int i = 0; i < BATCH_SIZE; i++)
                         {
-                            switch (WTERMSIG(status))
+                            if (pids[i] == pid)
                             {
-                            case 11:
-                                appendstr(outputs, "F", i);
-                                break;
-                            default:
-                                break;
+                                switch (WTERMSIG(status))
+                                {
+                                case 11:
+                                    append_status(outputs, "F", i + processed_count);
+                                    break;
+                                default:
+                                    break;
+                                }
                             }
                         }
                     }
-                    printf("child process %d exited due to signal %d\n", pid, WTERMSIG(status));
-                }
-                for (int i = 0; i < batch_size; i++)
-                {
-                    if (pids[i] == pid)
+                    // zero out pids that have exited
+                    for (int i = 0; i < BATCH_SIZE; i++)
                     {
-                        pids[i] = 0;
+                        if (pids[i] == pid)
+                            pids[i] = 0;
                     }
                 }
+
+                ++count;
+                sleep(1);
             }
-            else
-            {
-                printf("still waiting\n");
-            }
-
-            // int j = 0;
-            // while (pids[j] == 0 && j < batch_size)
-            // {
-            //     if (j == (batch_size - 1))
-            //     {
-            //         count = 11;
-            //     }
-            //     j++;
-            // }
-
-            ++count;
-            sleep(1);
-        }
-        // check for blocked or infinite children and kill them
-        for (int i = 0; i < batch_size; i++)
-        {
-
-            if (pids[i] != 0)
+            // check for blocked or infinite children and kill them
+            for (int i = 0; i < BATCH_SIZE; i++)
             {
 
-                // Construct the path to the status file
-                char path[50];
-                snprintf(path, sizeof(path), "/proc/%d/status", pids[i]);
-
-                // Open the status file for reading
-                FILE *file = fopen(path, "r");
-
-                if (file == NULL)
+                if (pids[i] != 0)
                 {
-                    perror("Error opening file");
-                    exit(EXIT_FAILURE);
-                }
 
-                // Read and print the content of the file
-                char buffer[256];
-                while (fgets(buffer, sizeof(buffer), file) != NULL)
-                {
-                    if (sscanf(buffer, "State:\t%c", &buffer[0]) == 1)
+                    // construct the path to the status file
+                    char path[50];
+                    snprintf(path, sizeof(path), "/proc/%d/status", pids[i]);
+
+                    FILE *file = fopen(path, "r");
+
+                    if (file == NULL)
                     {
-                        // printf("Process %d is in state: %c\n", pids[i], buffer[0]);
-                        break; // Stop reading after finding the state information
+                        perror("Error opening file");
+                        exit(EXIT_FAILURE);
                     }
-                }
-                fclose(file);
 
-                if (buffer[0] == 'S')
-                {
-                    appendstr(outputs, "B", i);
-                    printf("state is S so killing blocked child: %d\n", pids[i]);
-                }
-                if (buffer[0] == 'R')
-                {
-                    appendstr(outputs, "L", i);
-                    printf("state is R so killing infinite loop child: %d\n", pids[i]);
-                }
+                    // read the content of the status file
+                    char buffer[256];
+                    while (fgets(buffer, sizeof(buffer), file) != NULL)
+                    {
+                        if (sscanf(buffer, "State:\t%c", &buffer[0]) == 1)
+                            break;
+                    }
 
-                kill(pids[i], SIGKILL);
+                    fclose(file);
 
-                // printf("stale process: %d\n", pids[i]);
+                    // S means process is sleeping, waiting for input, so its marked as blocked
+                    if (buffer[0] == 'S')
+                        append_status(outputs, "B", i + processed_count);
+                    // R means process is running, so its marked as in an infinite loop
+                    if (buffer[0] == 'R')
+                        append_status(outputs, "L", i + processed_count);
+                    // kill process after appending status
+                    kill(pids[i], SIGKILL);
+                }
             }
+            // move onto next batch of submissions if any
+            processed_count += BATCH_SIZE;
         }
+        // move onto next test input
         params_offset++;
-        // }
-        fclose(f);
     }
 
-    FILE *f;
-
-    f = fopen("submission.txt", "r");
-    char exec_name[100];
-    for (int i = 0; i < B; i++)
+    // print out scores
+    for (int i = 0; i < submission_count; i++)
     {
-        if (fgets(exec_name, 100, f) != NULL)
+        printf("%s: ", basename(exec_paths[i])); /* submission name */
+        for (int j = 0; j < PARAMS; j++)
         {
-            exec_name[strcspn(exec_name, "\n")] = 0;
-            const char *lastSeparator = strrchr(exec_name, '/');
-
-            if (lastSeparator != NULL)
+            char code[25];
+            switch (outputs[i][j])
             {
-                // The last segment is everything after the last separator
-                const char *lastSegment = lastSeparator + 1;
-
-                strcpy(exec_name, lastSegment);
+            case 'C':
+                strcpy(code, "(correct)");
+                break;
+            case 'I':
+                strcpy(code, "(incorrect)");
+                break;
+            case 'L':
+                strcpy(code, "(infinite)");
+                break;
+            case 'B':
+                strcpy(code, "(blocked)");
+                break;
+            case 'S':
+                strcpy(code, "(slow)");
+                break;
+            case 'F':
+                strcpy(code, "(crash)");
+                break;
+            default:
+                break;
             }
-
-            printf("%s: ", exec_name);
-            for (int j = 0; j < argc - 2; j++)
-            {
-
-                char status_code = outputs[i][j];
-                char code[25];
-                switch (status_code)
-                {
-                case 'C':
-                    strcpy(code, "(correct)");
-                    break;
-                case 'I':
-                    strcpy(code, "(incorrect)");
-                    break;
-                case 'L':
-                    strcpy(code, "(infinite)");
-                    break;
-                case 'B':
-                    strcpy(code, "(blocked)");
-                    break;
-                case 'S':
-                    strcpy(code, "(slow)");
-                    break;
-                case 'F':
-                    strcpy(code, "(crash)");
-                    break;
-                default:
-                    break;
-                }
-                printf("%c %s", *argv[2 + j], code);
-                if (j != (params - 1))
-                {
-                    printf(", ");
-                }
-            }
-            printf("\n");
+            printf("%c %s", *argv[2 + j], code); /* test input, exit status */
+            if (j != (PARAMS - 1))
+                printf(", ");
         }
+        printf("\n");
     }
 
     return 0;
