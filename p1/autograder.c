@@ -40,6 +40,11 @@ int read_submissions(char paths[][MAX_LENGTH])
 
 int main(int argc, char *argv[])
 {
+      if(argc < 3){
+        perror("Incorrect arguments. Usage: ./autograder B p1 p2 ... pN\n");
+        exit(-1);
+    }
+
     const int BATCH_SIZE = atoi(argv[1]);
     char exec_paths[MAX_SUBMISSIONS][MAX_LENGTH];
     const int submission_count = read_submissions(exec_paths);
@@ -72,7 +77,7 @@ int main(int argc, char *argv[])
                 {
                     execl(exec_paths[i], basename(exec_paths[i + processed_count]), argv[params_offset], (char *)0);
                     perror("failed to execute");
-                    exit(1);
+                    exit(-1);
                 }
             }
 
@@ -90,7 +95,7 @@ int main(int argc, char *argv[])
                 {
                     /* an error other than an interrupted system call */
                     perror("waitpid");
-                    return 0;
+                    exit(-1);
                 }
                 else if (pid != 0)
                 {
