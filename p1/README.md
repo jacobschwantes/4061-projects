@@ -1,6 +1,6 @@
 # 4061 Project 1 - Basic Autograder
   
-## Team
+## Team - 26
 - Jacob Schwantes [schw2550]
 - Nadir Mustafa [musta099]
 - Adam El-Kishawy [elkis005]    
