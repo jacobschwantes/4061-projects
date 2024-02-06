@@ -40,10 +40,14 @@ int read_submissions(char paths[][MAX_LENGTH])
 
 int main(int argc, char *argv[])
 {
-      if(argc < 3){
+    if (argc < 3)
+    {
         perror("Incorrect arguments. Usage: ./autograder B p1 p2 ... pN\n");
         exit(-1);
     }
+
+    // populate submission.txt with executable paths
+    write_filepath_to_submissions("./test", "submission.txt");
 
     const int BATCH_SIZE = atoi(argv[1]);
     char exec_paths[MAX_SUBMISSIONS][MAX_LENGTH];
