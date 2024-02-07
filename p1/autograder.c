@@ -2,7 +2,6 @@
 #include <libgen.h>
 
 #define MAX_LENGTH 256
-#define MAX_SUBMISSIONS 25 /* max number of executables (tests) */
 
 // append return status of a process to outputs
 void append_status(char outputs[][MAX_LENGTH], char string[], int index)
@@ -13,8 +12,8 @@ void append_status(char outputs[][MAX_LENGTH], char string[], int index)
     }
 }
 
-// reads list of executables into memory
-int read_submissions(char paths[][MAX_LENGTH])
+// reads list of executables from submission.txt into memory
+int read_submissions(char paths[][MAX_LENGTH], int length)
 {
 
     FILE *F = fopen("submission.txt", "r");
@@ -28,14 +27,14 @@ int read_submissions(char paths[][MAX_LENGTH])
     char buffer[MAX_LENGTH];
     int count = 0;
 
-    while (fgets(buffer, MAX_LENGTH, F) != NULL && count < MAX_SUBMISSIONS)
+    while (fgets(buffer, MAX_LENGTH, F) != NULL && count < length)
     {
         buffer[strcspn(buffer, "\n")] = 0;
         strncpy(paths[count], buffer, MAX_LENGTH);
         count++;
     }
     fclose(F);
-    return count;
+    return 0;
 }
 
 int main(int argc, char *argv[])
@@ -47,17 +46,22 @@ int main(int argc, char *argv[])
     }
 
     // populate submission.txt with executable paths
-    write_filepath_to_submissions("./test", "submission.txt");
+    int SUBMISSION_COUNT = write_filepath_to_submissions("./test", "submission.txt");
 
+    char exec_paths[SUBMISSION_COUNT][MAX_LENGTH];
+    char outputs[SUBMISSION_COUNT][MAX_LENGTH];
+
+
+    // TODO: determine this dynamically using `cat /proc/cpuinfo | grep processor | wc -l`
     const int BATCH_SIZE = atoi(argv[1]);
-    char exec_paths[MAX_SUBMISSIONS][MAX_LENGTH];
-    const int submission_count = read_submissions(exec_paths);
     const int PARAMS = argc - 2;
-    char outputs[MAX_SUBMISSIONS][MAX_LENGTH];
     int params_offset = 2;
 
+    // read in submissions from submission.txt and store in exec_paths
+    read_submissions(exec_paths, SUBMISSION_COUNT);
+
     // initialize outputs array
-    for (int i = 0; i < BATCH_SIZE; ++i)
+    for (int i = 0; i < SUBMISSION_COUNT; ++i)
     {
         outputs[i][0] = '\0';
     }
@@ -66,10 +70,11 @@ int main(int argc, char *argv[])
     {
         int processed_count = 0;
         // need to run another batch with same test input if submission count exceeds batch size
-        while (submission_count > processed_count)
+        while (SUBMISSION_COUNT > processed_count)
         {
             pid_t pids[BATCH_SIZE];
 
+            // TODO: if batch size (core count) exceeds # of submissions, then use submission count as batch size instead.
             for (int i = 0; i < BATCH_SIZE; i++)
             {
                 if ((pids[i] = fork()) < 0)
@@ -91,15 +96,14 @@ int main(int argc, char *argv[])
 
             int count = 0;
             // check every second for child status updates until slow child finishes
-            while (count <= (L * 2) + 1)
+            while (count <= ((L * 2) + 1))
             {
                 pid = waitpid(-1, &status, WNOHANG);
 
                 if (pid == -1)
                 {
-                    /* an error other than an interrupted system call */
-                    perror("waitpid");
-                    exit(-1);
+                    //  no processes left to wait for
+                    break;
                 }
                 else if (pid != 0)
                 {
@@ -112,15 +116,18 @@ int main(int argc, char *argv[])
                                 switch (WEXITSTATUS(status))
                                 {
                                 case 1:
+                                    // (incorrect) 
                                     append_status(outputs, "I", i + processed_count);
                                     break;
                                 case 0:
                                     if (count > (L * 2))
                                     {
+                                        // (slow)
                                         append_status(outputs, "S", i + processed_count);
                                     }
                                     else
                                     {
+                                        // (correct)
                                         append_status(outputs, "C", i + processed_count);
                                     }
                                     break;
@@ -139,6 +146,7 @@ int main(int argc, char *argv[])
                                 switch (WTERMSIG(status))
                                 {
                                 case 11:
+                                    // (crashed) 
                                     append_status(outputs, "F", i + processed_count);
                                     break;
                                 default:
@@ -154,7 +162,6 @@ int main(int argc, char *argv[])
                             pids[i] = 0;
                     }
                 }
-
                 ++count;
                 sleep(1);
             }
@@ -189,9 +196,11 @@ int main(int argc, char *argv[])
 
                     // S means process is sleeping, waiting for input, so its marked as blocked
                     if (buffer[0] == 'S')
+                        // (blocked)
                         append_status(outputs, "B", i + processed_count);
                     // R means process is running, so its marked as in an infinite loop
                     if (buffer[0] == 'R')
+                        // (infinite loop) 
                         append_status(outputs, "L", i + processed_count);
                     // kill process after appending status
                     kill(pids[i], SIGKILL);
@@ -205,7 +214,7 @@ int main(int argc, char *argv[])
     }
 
     // print out scores
-    for (int i = 0; i < submission_count; i++)
+    for (int i = 0; i < SUBMISSION_COUNT; i++)
     {
         printf("%s: ", basename(exec_paths[i])); /* submission name */
         for (int j = 0; j < PARAMS; j++)

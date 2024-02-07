@@ -27,10 +27,11 @@
  * @Hint: This function can create submissions.txt if you wish to use it
  */
 
-void write_filepath_to_submissions(const char *directoryPath, const char *outputFileName) {
+int write_filepath_to_submissions(const char *directoryPath, const char *outputFileName) {
     DIR *dir;
     struct dirent *entry;
     FILE *file;
+
 
     // Open the directory
     dir = opendir(directoryPath);
@@ -47,6 +48,8 @@ void write_filepath_to_submissions(const char *directoryPath, const char *output
         exit(EXIT_FAILURE);
     }
 
+    int file_count = 0;
+
     char fullPath[PATH_MAX];
     while ((entry = readdir(dir)) != NULL) {
         // Skip "." and ".." directories
@@ -59,10 +62,12 @@ void write_filepath_to_submissions(const char *directoryPath, const char *output
 
         // Write the full path to the file
         fprintf(file, "%s\n", fullPath);
+        file_count++;
     }
 
     fclose(file);
     closedir(dir);
+    return file_count;
 }
 
 /* The inline keyword is used to suggest that the compiler embeds the function's code directly 
