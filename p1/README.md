@@ -18,7 +18,7 @@ Before proceeding, ensure the following tools are installed and accessible from 
 make all N=number of submissions to generate
 ```
 ### Run
-Pass arguments `B` for batch size (# of CPU cores), `Pi` for test inputs as integers.
+Pass arguments `B` for batch size, `Pi` for test inputs as integers.
 ```
 ./autograder <B> <P1> <P2> ...
 ```
