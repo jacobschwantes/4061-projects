@@ -39,11 +39,32 @@ int read_submissions(char paths[][MAX_LENGTH], int length)
 
 int main(int argc, char *argv[])
 {
-    if (argc < 3)
+    if (argc < 2)
     {
         perror("Incorrect arguments. Usage: ./autograder B p1 p2 ... pN\n");
         exit(-1);
     }
+
+    // getting number of cores
+    FILE *fp;
+    int cores = 0;
+    char line[256];
+
+    // Open the /proc/cpuinfo file for reading
+    fp = fopen("/proc/cpuinfo", "r");
+    if (fp == NULL) {
+        perror("Error opening /proc/cpuinfo");
+        return -1;
+    }
+
+    // Read each line, if line starts with the word "processor", we increment cores by one
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        if (strstr(line, "processor") == line) {
+            cores++;
+        }
+    }
+
+    fclose(fp);
 
     // populate submission.txt with executable paths
     int SUBMISSION_COUNT = write_filepath_to_submissions("./test", "submission.txt");
@@ -53,9 +74,10 @@ int main(int argc, char *argv[])
 
 
     // TODO: determine this dynamically using `cat /proc/cpuinfo | grep processor | wc -l`
-    const int BATCH_SIZE = atoi(argv[1]);
-    const int PARAMS = argc - 2;
-    int params_offset = 2;
+    const int BATCH_SIZE = cores;
+    const int PARAMS = argc - 1;
+    int params_offset = 1;
+    int iterations = 0; // variable set after checking whether BATCH_SIZE is bigger than SUBMISSION_COUNT; lines 98-103
 
     // read in submissions from submission.txt and store in exec_paths
     read_submissions(exec_paths, SUBMISSION_COUNT);
@@ -72,10 +94,22 @@ int main(int argc, char *argv[])
         // need to run another batch with same test input if submission count exceeds batch size
         while (SUBMISSION_COUNT > processed_count)
         {
-            pid_t pids[BATCH_SIZE];
+            // checks to see if we have more cores than test executables;
+            if(BATCH_SIZE > SUBMISSION_COUNT){
+                iterations = SUBMISSION_COUNT;
+            }
+            else{
+                iterations = BATCH_SIZE;
+            }
+            pid_t pids[iterations];
 
-            // TODO: if batch size (core count) exceeds # of submissions, then use submission count as batch size instead.
-            for (int i = 0; i < BATCH_SIZE; i++)
+            // if iterations is greater than remaining executables,
+            // set iterations to the remaining number of executables
+            if(iterations > (SUBMISSION_COUNT - processed_count)){
+                iterations = (SUBMISSION_COUNT-processed_count) % 3;
+            }
+
+            for (int i = 0; i < iterations; i++)
             {
                 if ((pids[i] = fork()) < 0)
                 {
@@ -109,7 +143,7 @@ int main(int argc, char *argv[])
                 {
                     if (WIFEXITED(status)) /* process exited normally */
                     {
-                        for (int i = 0; i < BATCH_SIZE; i++)
+                        for (int i = 0; i < iterations; i++)
                         {
                             if (pids[i] == pid)
                             {
@@ -139,7 +173,7 @@ int main(int argc, char *argv[])
                     }
                     else if (WIFSIGNALED(status)) /* process excited by signal */
                     {
-                        for (int i = 0; i < BATCH_SIZE; i++)
+                        for (int i = 0; i < iterations; i++)
                         {
                             if (pids[i] == pid)
                             {
@@ -156,7 +190,7 @@ int main(int argc, char *argv[])
                         }
                     }
                     // zero out pids that have exited
-                    for (int i = 0; i < BATCH_SIZE; i++)
+                    for (int i = 0; i < iterations; i++)
                     {
                         if (pids[i] == pid)
                             pids[i] = 0;
@@ -166,7 +200,7 @@ int main(int argc, char *argv[])
                 sleep(1);
             }
             // check for blocked or infinite children and kill them
-            for (int i = 0; i < BATCH_SIZE; i++)
+            for (int i = 0; i < iterations; i++)
             {
 
                 if (pids[i] != 0)
@@ -207,7 +241,7 @@ int main(int argc, char *argv[])
                 }
             }
             // move onto next batch of submissions if any
-            processed_count += BATCH_SIZE;
+            processed_count += iterations;
         }
         // move onto next test input
         params_offset++;
@@ -243,7 +277,7 @@ int main(int argc, char *argv[])
             default:
                 break;
             }
-            printf("%c %s", *argv[2 + j], code); /* test input, exit status */
+            printf("%c %s", *argv[1 + j], code); /* test input, exit status */
             if (j != (PARAMS - 1))
                 printf(", ");
         }
