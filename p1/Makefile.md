@@ -22,7 +22,7 @@ Before proceeding, ensure the following tools are installed and accessible from 
 - **`CFLAGS`**: Compiler flags for the compilation process. Defaults to `-Wall` (for all warnings) and `-g` (for debugging information).
 - **`N`**: The number of template program binaries to compile. This can be set when invoking `make`.
 - **`SOURCE_FILE`**: The source file for the template program, defaulting to `template.c`.
-- **`TEST_DIR`**: The directory where compiled template binaries will be placed, defaulting to `./test`.
+- **`SOL_DIR`**: The directory where compiled template binaries will be placed, defaulting to `./solutions`.
 
 ### Targets
 
@@ -78,5 +78,3 @@ To remove a specific number of template binaries, set `N`:
 ```bash
 make clean N=5
 ```
-
-
