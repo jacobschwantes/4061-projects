@@ -134,6 +134,7 @@ int main(int argc, char *argv[])
         perror(RED "Incorrect arguments. Usage: ./autograder p1 p2 ... pN\n" RESET);
         exit(-1);
     }
+    int slow_count = 0;
 
     // populate submission.txt with executable paths
     int SUBMISSION_COUNT = write_filepaths_to_submissions("./solutions", "submission.txt");
@@ -157,7 +158,7 @@ int main(int argc, char *argv[])
 
     while (params_offset < argc)
     {
-        printf("Starting execution with test input " YELLOW "%s" RESET "\n", argv[params_offset]);
+        printf("Starting execution for test input " YELLOW "%s" RESET "\n", argv[params_offset]);
         int processed_count = 0;
 
         // need to run another batch with same test input parameter if submission count exceeds batch size
@@ -176,6 +177,7 @@ int main(int argc, char *argv[])
             }
 
             pid_t pids[BATCH_SIZE];
+            struct timeval start_times[BATCH_SIZE];
 
             // if BATCH_SIZE is greater than remaining executables,
             // set BATCH_SIZE to the remaining number of executables
@@ -195,27 +197,26 @@ int main(int argc, char *argv[])
                 }
                 else if (pids[i] == 0)
                 {
+
                     execl(exec_paths[i], basename(exec_paths[i + processed_count]), argv[params_offset], (char *)0);
                     perror(RED "failed to execute\n" RESET);
                     exit(-1);
                 }
+                start_timer(&start_times[i]);
             }
 
             /* Parent Code */
+            struct timeval wait_start;
             int status;
             pid_t pid;
 
-            int iterations = 0;
-            // check every second for child status updates until slow child finishes
-            while (iterations <= ((L * 2) + 2))
+            // start timer to track how long we have been waiting for children to exit
+            start_timer(&wait_start);
+
+            // waiting for children that will exit
+            while (stop_timer(&wait_start) < (S + 2) * 1000)
             {
                 pid = waitpid(-1, &status, WNOHANG);
-
-                // ignore status updates that were triggered by us manually killing a process
-                if (WTERMSIG(status) == 9)
-                {
-                    continue;
-                }
 
                 if (pid == -1)
                 {
@@ -237,8 +238,9 @@ int main(int argc, char *argv[])
                                     append_status(outputs, "I", i + processed_count);
                                     break;
                                 case 0:
-                                    if (iterations >= (L * 2))
+                                    if (stop_timer(&start_times[i]) >= (S + 1) * 1000)
                                     {
+                                        slow_count++;
                                         // (slow)
                                         append_status(outputs, "S", i + processed_count);
                                     }
@@ -279,8 +281,6 @@ int main(int argc, char *argv[])
                             pids[i] = 0;
                     }
                 }
-                iterations++;
-                sleep(1);
             }
             // check for blocked or infinite children and kill them
             for (int i = 0; i < BATCH_SIZE; i++)
@@ -379,6 +379,6 @@ int main(int argc, char *argv[])
         }
         printf("\n");
     }
-
+    printf("slow count: %d\n", slow_count);
     return 0;
 }
