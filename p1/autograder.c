@@ -8,6 +8,61 @@
 #define GREEN "\033[0;32m"
 #define RESET "\033[0m"
 
+/**
+ * Writes the full paths of all files within a specified directory to a given output file.
+ * This function opens the specified directory, iterates over each entry excluding special
+ * entries "." and "..", constructs the full path for each file, and writes these paths to
+ * the specified output file.
+ * @param directoryPath The path to the directory whose file paths are to be written.
+ * @param outputFileName The path to the file where the full paths will be saved.
+ * @returns count The number of files read from the directory
+ * @Hint: This function can create submissions.txt if you wish to use it
+ */
+int write_filepaths_to_submissions(const char *directoryPath, const char *outputFileName)
+{
+    DIR *dir;
+    struct dirent *entry;
+    FILE *file;
+
+    // Open the directory
+    dir = opendir(directoryPath);
+    if (!dir)
+    {
+        perror("Failed to open directory");
+        exit(EXIT_FAILURE);
+    }
+
+    // Open or create the output file
+    file = fopen(outputFileName, "w");
+    if (!file)
+    {
+        perror("Failed to open output file");
+        closedir(dir);
+        exit(EXIT_FAILURE);
+    }
+    int count = 0;
+    char fullPath[PATH_MAX];
+    while ((entry = readdir(dir)) != NULL)
+    {
+        // Skip "." and ".." directories
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+        {
+            continue;
+        }
+
+        // Construct the full path
+        snprintf(fullPath, sizeof(fullPath), "%s/%s", directoryPath, entry->d_name);
+
+        // Write the full path to the file
+        fprintf(file, "%s\n", fullPath);
+        count++;
+    }
+
+    fclose(file);
+    closedir(dir);
+    return count;
+}
+
 // appends exit status of a completed process to outputs array
 void append_status(char outputs[][MAX_LENGTH], char string[], int index)
 {
@@ -39,7 +94,7 @@ int read_submissions(char paths[][MAX_LENGTH], int length)
         count++;
     }
     fclose(F);
-    printf("Found " YELLOW "%d" RESET " submissions in submissions.txt\n", count);
+    printf("Found " YELLOW "%d" RESET " submissions in submission.txt\n", count);
     return 0;
 }
 
@@ -81,7 +136,7 @@ int main(int argc, char *argv[])
     }
 
     // populate submission.txt with executable paths
-    int SUBMISSION_COUNT = write_filepath_to_submissions("./test", "submission.txt");
+    int SUBMISSION_COUNT = write_filepaths_to_submissions("./solutions", "submission.txt");
 
     char exec_paths[SUBMISSION_COUNT][MAX_LENGTH];
     char outputs[SUBMISSION_COUNT][MAX_LENGTH];
@@ -152,9 +207,15 @@ int main(int argc, char *argv[])
 
             int iterations = 0;
             // check every second for child status updates until slow child finishes
-            while (iterations <= ((L * 2) + 1))
+            while (iterations <= ((L * 2) + 2))
             {
                 pid = waitpid(-1, &status, WNOHANG);
+
+                // ignore status updates that were triggered by us manually killing a process
+                if (WTERMSIG(status) == 9)
+                {
+                    continue;
+                }
 
                 if (pid == -1)
                 {
@@ -176,7 +237,7 @@ int main(int argc, char *argv[])
                                     append_status(outputs, "I", i + processed_count);
                                     break;
                                 case 0:
-                                    if (iterations > (L * 2))
+                                    if (iterations >= (L * 2))
                                     {
                                         // (slow)
                                         append_status(outputs, "S", i + processed_count);
