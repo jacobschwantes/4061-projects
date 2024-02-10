@@ -2,8 +2,13 @@
 #include <libgen.h>
 
 #define MAX_LENGTH 256
+#define CYAN "\033[0;36m"
+#define RED "\033[0;31m"
+#define YELLOW "\033[0;33m"
+#define GREEN "\033[0;32m"
+#define RESET "\033[0m"
 
-// append return status of a process to outputs
+// appends exit status of a completed process to outputs array
 void append_status(char outputs[][MAX_LENGTH], char string[], int index)
 {
     if (strlen(outputs[index]) + strlen(string) < MAX_LENGTH)
@@ -21,7 +26,7 @@ int read_submissions(char paths[][MAX_LENGTH], int length)
     if (F == NULL)
     {
         perror("Error opening file");
-        return -1;
+        exit(-1);
     };
 
     char buffer[MAX_LENGTH];
@@ -34,10 +39,13 @@ int read_submissions(char paths[][MAX_LENGTH], int length)
         count++;
     }
     fclose(F);
+    printf("Found " YELLOW "%d" RESET " submissions in submissions.txt\n", count);
     return 0;
 }
 
-int get_core_count(){
+// reads proc/cpuinfo and returns the core count of the host.
+int get_core_count()
+{
 
     FILE *fp;
     int cores = 0;
@@ -45,18 +53,21 @@ int get_core_count(){
 
     // Open the /proc/cpuinfo file for reading
     fp = fopen("/proc/cpuinfo", "r");
-    if (fp == NULL) {
-        perror("Error opening /proc/cpuinfo");
-        return -1;
+    if (fp == NULL)
+    {
+        perror(RED "Error opening /proc/cpuinfo\n" RESET);
+        exit(-1);
     }
 
     // Read each line, if line starts with the word "processor", we increment cores by one
-    while (fgets(line, sizeof(line), fp) != NULL) {
-        if (strstr(line, "processor") == line) {
+    while (fgets(line, sizeof(line), fp) != NULL)
+    {
+        if (strstr(line, "processor") == line)
+        {
             cores++;
         }
     }
-
+    printf("Core count of host is " YELLOW "%d\n" RESET, cores);
     fclose(fp);
     return cores;
 }
@@ -65,7 +76,7 @@ int main(int argc, char *argv[])
 {
     if (argc < 2)
     {
-        perror("Incorrect arguments. Usage: ./autograder p1 p2 ... pN\n");
+        perror(RED "Incorrect arguments. Usage: ./autograder p1 p2 ... pN\n" RESET);
         exit(-1);
     }
 
@@ -75,9 +86,6 @@ int main(int argc, char *argv[])
     char exec_paths[SUBMISSION_COUNT][MAX_LENGTH];
     char outputs[SUBMISSION_COUNT][MAX_LENGTH];
 
-
-    // TODO: determine this dynamically using `cat /proc/cpuinfo | grep processor | wc -l`
-
     const int CORE_COUNT = get_core_count();
     const int PARAMS = argc - 1;
     int params_offset = 1;
@@ -86,7 +94,7 @@ int main(int argc, char *argv[])
     // read in submissions from submission.txt and store in exec_paths
     read_submissions(exec_paths, SUBMISSION_COUNT);
 
-    // initialize outputs array
+    // initialize outputs array with empty strings
     for (int i = 0; i < SUBMISSION_COUNT; ++i)
     {
         outputs[i][0] = '\0';
@@ -94,36 +102,46 @@ int main(int argc, char *argv[])
 
     while (params_offset < argc)
     {
+        printf("Starting execution with test input " YELLOW "%s" RESET "\n", argv[params_offset]);
         int processed_count = 0;
-        // need to run another batch with same test input if submission count exceeds batch size
+
+        // need to run another batch with same test input parameter if submission count exceeds batch size
         while (SUBMISSION_COUNT > processed_count)
         {
-            // checks to see if we have more cores than test executables;
-            if(CORE_COUNT > SUBMISSION_COUNT){
+
+            // checks to see if we have more cores available than test executables
+            // so we dont create more processes than we need
+            if (CORE_COUNT > SUBMISSION_COUNT)
+            {
                 BATCH_SIZE = SUBMISSION_COUNT;
             }
-            else{
+            else
+            {
                 BATCH_SIZE = CORE_COUNT;
             }
+
             pid_t pids[BATCH_SIZE];
 
             // if BATCH_SIZE is greater than remaining executables,
             // set BATCH_SIZE to the remaining number of executables
-            if(BATCH_SIZE > (SUBMISSION_COUNT - processed_count)){
-                BATCH_SIZE = (SUBMISSION_COUNT-processed_count) % BATCH_SIZE;
+            if (BATCH_SIZE > (SUBMISSION_COUNT - processed_count))
+            {
+                int remaining_submissions = (SUBMISSION_COUNT - processed_count) % BATCH_SIZE;
+                printf("Only" YELLOW " %d " RESET "submissions remaining for test input" YELLOW " %s" RESET ", setting batch size to " YELLOW "%d" RESET ".\n", remaining_submissions, argv[params_offset], remaining_submissions);
+                BATCH_SIZE = remaining_submissions;
             }
-
+            printf("Creating" YELLOW " %d " RESET "processes\n", BATCH_SIZE);
             for (int i = 0; i < BATCH_SIZE; i++)
             {
                 if ((pids[i] = fork()) < 0)
                 {
-                    perror("failed to fork");
+                    perror(RED "failed to fork\n" RESET);
                     exit(-1);
                 }
                 else if (pids[i] == 0)
                 {
                     execl(exec_paths[i], basename(exec_paths[i + processed_count]), argv[params_offset], (char *)0);
-                    perror("failed to execute");
+                    perror(RED "failed to execute\n" RESET);
                     exit(-1);
                 }
             }
@@ -132,15 +150,15 @@ int main(int argc, char *argv[])
             int status;
             pid_t pid;
 
-            int count = 0;
+            int iterations = 0;
             // check every second for child status updates until slow child finishes
-            while (count <= ((L * 2) + 1))
+            while (iterations <= ((L * 2) + 1))
             {
                 pid = waitpid(-1, &status, WNOHANG);
 
                 if (pid == -1)
                 {
-                    //  no processes left to wait for
+                    //  no processes left to wait for so we move to next batch
                     break;
                 }
                 else if (pid != 0)
@@ -154,11 +172,11 @@ int main(int argc, char *argv[])
                                 switch (WEXITSTATUS(status))
                                 {
                                 case 1:
-                                    // (incorrect) 
+                                    // (incorrect)
                                     append_status(outputs, "I", i + processed_count);
                                     break;
                                 case 0:
-                                    if (count > (L * 2))
+                                    if (iterations > (L * 2))
                                     {
                                         // (slow)
                                         append_status(outputs, "S", i + processed_count);
@@ -184,7 +202,7 @@ int main(int argc, char *argv[])
                                 switch (WTERMSIG(status))
                                 {
                                 case 11:
-                                    // (crashed) 
+                                    // (crashed)
                                     append_status(outputs, "F", i + processed_count);
                                     break;
                                 default:
@@ -200,7 +218,7 @@ int main(int argc, char *argv[])
                             pids[i] = 0;
                     }
                 }
-                ++count;
+                iterations++;
                 sleep(1);
             }
             // check for blocked or infinite children and kill them
@@ -218,7 +236,7 @@ int main(int argc, char *argv[])
 
                     if (file == NULL)
                     {
-                        perror("Error opening file");
+                        perror(RED "Error opening file\n" RESET);
                         exit(EXIT_FAILURE);
                     }
 
@@ -238,20 +256,33 @@ int main(int argc, char *argv[])
                         append_status(outputs, "B", i + processed_count);
                     // R means process is running, so its marked as in an infinite loop
                     if (buffer[0] == 'R')
-                        // (infinite loop) 
+                        // (infinite loop)
                         append_status(outputs, "L", i + processed_count);
                     // kill process after appending status
                     kill(pids[i], SIGKILL);
                 }
             }
-            // move onto next batch of submissions if any
+            // move onto next batch of submissions
             processed_count += BATCH_SIZE;
         }
-        // move onto next test input
+        // move onto next input parameter
         params_offset++;
     }
 
-    // print out scores
+    // print out results
+    printf("Results from executing " YELLOW "%d" RESET " submissions with test inputs ", SUBMISSION_COUNT);
+    for (int i = 0; i < PARAMS; i++)
+    {
+        printf(YELLOW "%s" RESET, argv[i + 1]);
+        if (i != PARAMS - 1)
+        {
+            printf(", ");
+        }
+        else
+        {
+            printf(":\n");
+        }
+    }
     for (int i = 0; i < SUBMISSION_COUNT; i++)
     {
         printf("%s: ", basename(exec_paths[i])); /* submission name */
@@ -261,27 +292,27 @@ int main(int argc, char *argv[])
             switch (outputs[i][j])
             {
             case 'C':
-                strcpy(code, "(correct)");
+                strcpy(code, GREEN "(correct)" RESET);
                 break;
             case 'I':
-                strcpy(code, "(incorrect)");
+                strcpy(code, RED "(incorrect)" RESET);
                 break;
             case 'L':
-                strcpy(code, "(infinite)");
+                strcpy(code, RED "(infinite)" RESET);
                 break;
             case 'B':
-                strcpy(code, "(blocked)");
+                strcpy(code, RED "(blocked)" RESET);
                 break;
             case 'S':
-                strcpy(code, "(slow)");
+                strcpy(code, YELLOW "(slow)" RESET);
                 break;
             case 'F':
-                strcpy(code, "(crash)");
+                strcpy(code, RED "(crash)" RESET);
                 break;
             default:
                 break;
             }
-            printf("%c %s", *argv[1 + j], code); /* test input, exit status */
+            printf(CYAN "%c" RESET " %s", *argv[1 + j], code); /* test input, exit status */
             if (j != (PARAMS - 1))
                 printf(", ");
         }
