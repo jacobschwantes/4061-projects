@@ -134,7 +134,7 @@ int main(int argc, char *argv[])
         perror(RED "Incorrect arguments. Usage: ./autograder p1 p2 ... pN\n" RESET);
         exit(-1);
     }
-    int slow_count = 0;
+
 
     // populate submission.txt with executable paths
     int SUBMISSION_COUNT = write_filepaths_to_submissions("./solutions", "submission.txt");
@@ -240,7 +240,6 @@ int main(int argc, char *argv[])
                                 case 0:
                                     if (stop_timer(&start_times[i]) >= (S + 1) * 1000)
                                     {
-                                        slow_count++;
                                         // (slow)
                                         append_status(outputs, "S", i + processed_count);
                                     }
@@ -285,9 +284,10 @@ int main(int argc, char *argv[])
             // check for blocked or infinite children and kill them
             for (int i = 0; i < BATCH_SIZE; i++)
             {
-
+                
                 if (pids[i] != 0)
                 {
+                    usleep(1000); // sleep for .1 seconds before reopening status file to check state
 
                     // construct the path to the status file
                     char path[50];
@@ -312,13 +312,15 @@ int main(int argc, char *argv[])
                     fclose(file);
 
                     // S means process is sleeping, waiting for input, so its marked as blocked
-                    if (buffer[0] == 'S')
+                    if (buffer[0] == 'S'){
                         // (blocked)
                         append_status(outputs, "B", i + processed_count);
+                    }
                     // R means process is running, so its marked as in an infinite loop
-                    if (buffer[0] == 'R')
+                    if (buffer[0] == 'R'){
                         // (infinite loop)
                         append_status(outputs, "L", i + processed_count);
+                    }
                     // kill process after appending status
                     kill(pids[i], SIGKILL);
                 }
@@ -379,6 +381,5 @@ int main(int argc, char *argv[])
         }
         printf("\n");
     }
-    printf("slow count: %d\n", slow_count);
     return 0;
 }
