@@ -10,15 +10,14 @@
 - Nadir: Helped implement autograder.c, research, debugging (pair programming)
 - Adam: Readme, 3.f response
 
+## Usage
 Before proceeding, ensure the following tools are installed and accessible from your command line or terminal:
 
 - **GNU Make**
 - **GCC (GNU Compiler Collection)**
-
-## Usage
 ### Compile
 ```
-make all N=number of submissions to generate
+make all N=<number of solutions to generate>
 ```
 ### Run
 Pass arguments `Pi` for test inputs as integers.
@@ -27,12 +26,12 @@ Pass arguments `Pi` for test inputs as integers.
 ```
 
 ## Assumptions
-- A process receives a score of (blocked) if it is sleeping and has not exited after 2 seconds.
-- A process receives a score of (slow) if it exits after 2 seconds, per the `template.c` spec.
-- A process receives a score of (infinite) if it is running and has not exited after 2 seconds.
+- A process receives a score of (blocked) if it is sleeping and has not exited after 10 seconds.
+- A process receives a score of (slow) if it exits after 10 seconds, per the `template.c` spec.
+- A process receives a score of (infinite) if it is running and has not exited after 10 seconds.
 - Child processes are batched by running different submissions in parallel with the same input parameter.
 
-## Q1 Answer
+## Q1/3.f Answer
 After modifying and simplifying template.c to only return 1, it became apparent how beneficial parallelism can be.
 The 10 processes that we created executed almost instantly. However, is seems that parallelism is only beneficial 
 when it comes to processes that are doing real computation. With the original template.c file, we are artificially
