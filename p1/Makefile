@@ -22,6 +22,6 @@ $(SOL_DIR)/sol_%: $(SOURCE_FILE)
 
 # Clean the build
 clean:
-	rm -f autograder $(BINARIES)
+	rm -f autograder $(BINARIES) submissions.txt
 
 .PHONY: all clean
