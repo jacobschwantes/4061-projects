@@ -76,9 +76,31 @@ char **get_student_executables(char *solution_dir, int *num_executables) {
 }
 
 
-// TODO: Implement this function
+// * Implement this function
 int get_batch_size() {
-    return 8;
+    FILE *fp;
+    int cores = 0;
+    char line[256];
+
+    // Open the /proc/cpuinfo file for reading
+    fp = fopen("/proc/cpuinfo", "r");
+    if (fp == NULL)
+    {
+        perror("Error opening /proc/cpuinfo\n");
+        exit(-1);
+    }
+
+    // Read each line, if line starts with the word "processor", we increment cores by one
+    while (fgets(line, sizeof(line), fp) != NULL)
+    {
+        if (strstr(line, "processor") == line)
+        {
+            cores++;
+        }
+    }
+    printf("Core count of host is %d\n", cores);
+    fclose(fp);
+    return cores;
 }
 
 

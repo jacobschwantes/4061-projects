@@ -125,6 +125,7 @@ int main(int argc, char *argv[]) {
 
     // TODO (Change 0): Implement get_batch_size() function
     int batch_size = get_batch_size();
+    printf("%d", batch_size);
 
     char **executable_paths = get_student_executables(testdir, &num_executables);
 
