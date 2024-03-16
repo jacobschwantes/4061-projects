@@ -23,8 +23,9 @@ void timeout_handler(int signum) {
 // Execute the student's executable using exec()
 void execute_solution(char *executable_path, char *input, int batch_idx) {
     #ifdef PIPE
-        // TODO: Setup pipe
-
+        // * Setup pipe
+        int ends[2];
+        pipe(ends);
     #endif
     
     pid_t pid = fork();
@@ -32,19 +33,45 @@ void execute_solution(char *executable_path, char *input, int batch_idx) {
     // Child process
     if (pid == 0) {
         char *executable_name = get_exe_name(executable_path);
+        
+        // * (Change 1): Redirect STDOUT to output/<executable>.<input> file
+        // This is green because it's pretty much done, but  it's not passing the autograder
+        char output_file_name[256];
+        snprintf(output_file_name, sizeof(output_file_name), "output/%s.%s", executable_name, input);
+        
+        int fd = open(output_file_name, O_WRONLY | O_CREAT | O_TRUNC);
+        if(fd == -1){
+            perror("Failed to open file");
+            exit(1);
+        }
 
-        // TODO (Change 1): Redirect STDOUT to output/<executable>.<input> file
-
+        if(dup2(fd, 1) == -1){
+            perror("Failed to redirect");
+            exit(1);
+        }
+        close(fd);
 
         // TODO (Change 2): Handle different cases for input source
         #ifdef EXEC
-
+            execl(executable_path, executable_path, input, NULL);
 
         #elif REDIR
             
             // TODO: Redirect STDIN to input/<input>.in file
-            
+            char input_file[256];
+            snprintf(input_file, sizeof(input_file), "input/%d.in", batch_idx + 1);
+            int input_fd = open(input_file, O_RDONLY | O_CREAT | O_TRUNC);
+            if(input_fd == -1){
+                perror("Failed to open input file");
+                exit(1);
+            }
 
+            if(dup2(input_fd, 0) == -1){
+                perror("Failed to redirect");
+                exit(1);
+            }
+            close(input_fd);
+            // execl(executable_path, executable_path, NULL);
         #elif PIPE
             
             // TODO: Pass read end of pipe to child process
@@ -64,6 +91,20 @@ void execute_solution(char *executable_path, char *input, int batch_idx) {
         
 
         pids[batch_idx] = pid;
+
+        int status;
+        waitpid(pid, &status, 0);
+
+        char output_file_name[256];
+        char *executable_name = get_exe_name(executable_path);
+        snprintf(output_file_name, sizeof(output_file_name), "output/%s.%s", executable_name, input);
+        if(unlink(output_file_name) == -1){
+            perror("Failed to unlink and remove output file");
+            exit(1);
+         } 
+        // else {
+        //     printf("removed out file: %s\n", output_file_name);
+        // }
     }
     // Fork failed
     else {
@@ -123,9 +164,8 @@ int main(int argc, char *argv[]) {
     char *testdir = argv[1];
     total_params = argc - 2;
 
-    // TODO (Change 0): Implement get_batch_size() function
+    // * Implement get_batch_size() function
     int batch_size = get_batch_size();
-    printf("%d", batch_size);
 
     char **executable_paths = get_student_executables(testdir, &num_executables);
 

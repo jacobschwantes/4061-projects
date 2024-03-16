@@ -98,7 +98,6 @@ int get_batch_size() {
             cores++;
         }
     }
-    printf("Core count of host is %d\n", cores);
     fclose(fp);
     return cores;
 }
@@ -110,7 +109,7 @@ void create_input_files(char **argv_params, int num_parameters) {
 }
 
 
-// TODO: Implement this function
+// TODO: Implement this function 
 void start_timer(int seconds, void (*timeout_handler)(int)) {
 
 }
