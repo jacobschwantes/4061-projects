@@ -35,16 +35,15 @@ void execute_solution(char *executable_path, char *input, int batch_idx) {
         char *executable_name = get_exe_name(executable_path);
         
         // * (Change 1): Redirect STDOUT to output/<executable>.<input> file
-        // This is green because it's pretty much done, but  it's not passing the autograder
         char output_file_name[256];
         snprintf(output_file_name, sizeof(output_file_name), "output/%s.%s", executable_name, input);
         
-        int fd = open(output_file_name, O_WRONLY | O_CREAT | O_TRUNC);
+        int fd = open(output_file_name, O_WRONLY | O_CREAT, 0666);
         if(fd == -1){
-            perror("Failed to open file");
+            // perror("Failed to open output file");
+            fprintf(stderr, "Failed to open output file: %s\n", output_file_name);
             exit(1);
         }
-
         if(dup2(fd, 1) == -1){
             perror("Failed to redirect");
             exit(1);
@@ -53,25 +52,25 @@ void execute_solution(char *executable_path, char *input, int batch_idx) {
 
         // TODO (Change 2): Handle different cases for input source
         #ifdef EXEC
-            execl(executable_path, executable_path, input, NULL);
+            execl(executable_path, executable_name, input, NULL);
 
         #elif REDIR
             
-            // TODO: Redirect STDIN to input/<input>.in file
+            // * Redirect STDIN to input/<input>.in file
             char input_file[256];
-            snprintf(input_file, sizeof(input_file), "input/%d.in", batch_idx + 1);
-            int input_fd = open(input_file, O_RDONLY | O_CREAT | O_TRUNC);
+            snprintf(input_file, sizeof(input_file), "input/%s.in", input);
+            int input_fd = open(input_file, O_RDONLY);
             if(input_fd == -1){
                 perror("Failed to open input file");
                 exit(1);
             }
-
+            
             if(dup2(input_fd, 0) == -1){
                 perror("Failed to redirect");
                 exit(1);
             }
             close(input_fd);
-            // execl(executable_path, executable_path, NULL);
+            execl(executable_path, executable_name, NULL);
         #elif PIPE
             
             // TODO: Pass read end of pipe to child process
@@ -91,20 +90,6 @@ void execute_solution(char *executable_path, char *input, int batch_idx) {
         
 
         pids[batch_idx] = pid;
-
-        int status;
-        waitpid(pid, &status, 0);
-
-        char output_file_name[256];
-        char *executable_name = get_exe_name(executable_path);
-        snprintf(output_file_name, sizeof(output_file_name), "output/%s.%s", executable_name, input);
-        if(unlink(output_file_name) == -1){
-            perror("Failed to unlink and remove output file");
-            exit(1);
-         } 
-        // else {
-        //     printf("removed out file: %s\n", output_file_name);
-        // }
     }
     // Fork failed
     else {
@@ -129,7 +114,7 @@ void monitor_and_evaluate_solutions(int tested, char *param, int param_idx) {
         pid_t pid = waitpid(pids[j], &status, 0);
 
         // TODO: What if waitpid is interrupted by a signal?
-        
+
 
         // TODO: Determine if the child process finished normally, segfaulted, or timed out
         int exit_status = WEXITSTATUS(status);
@@ -149,6 +134,8 @@ void monitor_and_evaluate_solutions(int tested, char *param, int param_idx) {
         // Mark the process as finished
         child_status[j] = -1;
     }
+
+
 
     free(child_status);
 }
@@ -178,7 +165,7 @@ int main(int argc, char *argv[]) {
     }
 
     #ifdef REDIR
-        // TODO: Create the input/<input>.in files and write the parameters to them
+        // * Create the input/<input>.in files and write the parameters to them
         create_input_files(argv + 2, total_params);  // Implement this function (src/utils.c)
     #endif
     
@@ -211,7 +198,7 @@ int main(int argc, char *argv[]) {
                 cancel_timer();  // Implement this function (src/utils.c)
             }
 
-            // TODO Unlink all output files in current batch (output/<executable>.<input>)
+            // * Unlink all output files in current batch (output/<executable>.<input>)
             remove_output_files(results, tested, curr_batch_size, argv[i]);  // Implement this function (src/utils.c)
 
             // Adjust the remaining count after the batch has finished
@@ -220,7 +207,7 @@ int main(int argc, char *argv[]) {
     }
 
     #ifdef REDIR
-        // TODO: Unlink all input files for REDIR case (<input>.in)
+        // * Unlink all input files for REDIR case (<input>.in)
         remove_input_files(argv + 2, total_params);  // Implement this function (src/utils.c)
     #endif
 

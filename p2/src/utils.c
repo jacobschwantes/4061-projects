@@ -103,9 +103,19 @@ int get_batch_size() {
 }
 
 
-// TODO: Implement this function
+// * Implement this function
 void create_input_files(char **argv_params, int num_parameters) {
-
+    for(int i = 0; i < num_parameters; i++){
+        char file_path[256];
+        snprintf(file_path, sizeof(file_path), "input/%s.in", argv_params[i]);
+        int fd;
+        fd = creat(file_path, O_CREAT);
+        if (fd == -1) {
+            perror("Failed to create input file");
+            exit(1);
+        }
+        close(fd);
+    }
 }
 
 
@@ -121,15 +131,33 @@ void cancel_timer() {
 }
 
 
-// TODO: Implement this function
+// * Implement this function
 void remove_input_files(char **argv_params, int num_parameters) {
-
+        // unlink input files
+        for(int i = 0; i < num_parameters; i++){
+            char input_file_name[256];
+            snprintf(input_file_name, sizeof(input_file_name), "input/%s.in", argv_params[i]);
+            if(unlink(input_file_name) == -1){
+                perror("Failed to unlink and remove input file");
+                exit(1);
+            }
+        }
 }
 
 
-// TODO: Implement this function
+// * Implement this function
 void remove_output_files(autograder_results_t *results, int tested, int current_batch_size, char *param) {
 
+    for(int i = 0; i < current_batch_size; i++){
+        char *exe_path = results[i].exe_path;
+        char *executable_name = get_exe_name(exe_path);
+        char output_file_name[256];
+        snprintf(output_file_name, sizeof(output_file_name), "output/%s.%s", executable_name, param);
+        if(unlink(output_file_name) == -1){
+            fprintf(stderr, "Failed to open output file: %s\n", output_file_name);
+            exit(1);
+        }
+    }
 }
 
 

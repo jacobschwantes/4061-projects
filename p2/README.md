@@ -20,8 +20,11 @@ Before proceeding, ensure the following tools are installed and accessible from 
 
 ### Compile
 
-- To run the program, first run make in the terminal. There are 3 different versions of the code you can run. make exec, make redir, make pipe. Depending on the
-- version you want to run, type in the associated command for it.
+- To run the program, first run make in the terminal. There are 3 different versions of the code you can run. make exec, make redir, make pipe. Depending on the version you want to run, type in the associated command for it.
+
+```
+make <exec|redir|pipe>
+```
 
 ### Run
 
@@ -33,4 +36,4 @@ Pass arguments `Pi` for test inputs as integers.
 
 ## Assumptions
 
-TODO
+There are no assumptions to be made. Only that batch size is set by the system's processor count.
