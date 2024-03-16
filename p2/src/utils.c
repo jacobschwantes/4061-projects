@@ -109,7 +109,7 @@ void create_input_files(char **argv_params, int num_parameters) {
         char file_path[256];
         snprintf(file_path, sizeof(file_path), "input/%s.in", argv_params[i]);
         int fd;
-        fd = creat(file_path, O_CREAT);
+        fd = creat(file_path, 0666);
         if (fd == -1) {
             perror("Failed to create input file");
             exit(1);
