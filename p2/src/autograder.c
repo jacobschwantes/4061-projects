@@ -50,7 +50,7 @@ void execute_solution(char *executable_path, char *input, int batch_idx) {
         }
         close(fd);
 
-        // TODO (Change 2): Handle different cases for input source
+        // * (Change 2): Handle different cases for input source
         #ifdef EXEC
             execl(executable_path, executable_name, input, NULL);
 
@@ -73,7 +73,14 @@ void execute_solution(char *executable_path, char *input, int batch_idx) {
             execl(executable_path, executable_name, NULL);
         #elif PIPE
             
-            // TODO: Pass read end of pipe to child process
+            // * Pass read end of pipe to child process
+            close(ends[1]);
+            if(dup2(ends[0], 0) == -1){
+                perror("Failed to redirect stdin to read end of pipe");
+                exit(1);
+            }
+            close(ends[0]);
+            execl(executable_path, executable_name, input, NULL);
 
         #endif
 
@@ -84,7 +91,10 @@ void execute_solution(char *executable_path, char *input, int batch_idx) {
     // Parent process
     else if (pid > 0) {
         #ifdef PIPE
-            // TODO: Send input to child process via pipe
+            // * Send input to child process via pipe
+            close(ends[0]);
+            write(ends[1], input, strlen(input));
+            close(ends[1]);
             
         #endif
         
