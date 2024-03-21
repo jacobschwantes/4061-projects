@@ -78,6 +78,7 @@ char **get_student_executables(char *solution_dir, int *num_executables) {
 
 // * Implement this function
 int get_batch_size() {
+    // straight from project 1
     FILE *fp;
     int cores = 0;
     char line[256];
@@ -119,15 +120,31 @@ void create_input_files(char **argv_params, int num_parameters) {
 }
 
 
-// TODO: Implement this function 
+// * Implement this function 
 void start_timer(int seconds, void (*timeout_handler)(int)) {
+    // straight from slides, sig_1_post.pdf
+    struct itimerval interval;
+    struct sigaction act;
+    act.sa_handler = timeout_handler;
+    sigaction(SIGALRM, &act, NULL);
 
+    interval.it_interval.tv_sec = 0;
+    interval.it_interval.tv_usec = 0;
+    interval.it_value.tv_sec = seconds;
+    interval.it_value.tv_usec = 0;
+    setitimer(ITIMER_REAL, &interval, NULL);
 }
 
 
-// TODO: Implement this function
+// * Implement this function
 void cancel_timer() {
+    struct itimerval interval;
 
+    interval.it_interval.tv_sec = 0;
+    interval.it_interval.tv_usec = 0;
+    interval.it_value.tv_sec = 0;
+    interval.it_value.tv_usec = 0;
+    setitimer(ITIMER_REAL, &interval, NULL);
 }
 
 

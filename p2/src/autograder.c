@@ -14,9 +14,14 @@ int total_params;         // Total number of parameters to test - (argc - 2)
 int *child_status;
 
 
-// TODO (Change 3): Timeout handler for alarm signal - kill remaining running child processes
+// * (Change 3): Timeout handler for alarm signal - kill remaining running child processes
 void timeout_handler(int signum) {
-
+    for(int i = 0; i < curr_batch_size; i++){
+        if(child_status[i] == 1){
+            kill(pids[i], SIGKILL);
+            child_status[i] = -1;
+        }
+    }
 }
 
 
@@ -123,16 +128,37 @@ void monitor_and_evaluate_solutions(int tested, char *param, int param_idx) {
         int status;
         pid_t pid = waitpid(pids[j], &status, 0);
 
-        // TODO: What if waitpid is interrupted by a signal?
+        // * What if waitpid is interrupted by a signal?
+        while(pid == -1 && errno == EINTR){
+            pid = waitpid(pids[j], &status, 0);
+        }
 
 
-        // TODO: Determine if the child process finished normally, segfaulted, or timed out
+        // * Determine if the child process finished normally, segfaulted, or timed out
         int exit_status = WEXITSTATUS(status);
         int exited = WIFEXITED(status);
         int signaled = WIFSIGNALED(status);
+
+        if(exited){
+            if(exit_status == 1){
+                results[tested - curr_batch_size + j].status[param_idx] = CORRECT;
+            }
+            else{
+                results[tested - curr_batch_size + j].status[param_idx] = INCORRECT;
+            }
+        }
+        else if(signaled){
+            int sig = WTERMSIG(status);
+            if(sig == SIGKILL || sig == SIGALRM){
+                results[tested - curr_batch_size + j].status[param_idx] = STUCK_OR_INFINITE;
+            }
+            else{
+                results[tested - curr_batch_size + j].status[param_idx] = SEGFAULT;
+            }
+        }
         
         
-        // TODO: Also, update the results struct with the status of the child process
+        // * Also, update the results struct with the status of the child process. This is done in the if statements above
 
         // NOTE: Make sure you are using the output/<executable>.<input> file to determine the status
         //       of the child process, NOT the exit status like in Project 1.
@@ -191,19 +217,19 @@ int main(int argc, char *argv[]) {
             curr_batch_size = remaining < batch_size ? remaining : batch_size;
             pids = malloc(curr_batch_size * sizeof(pid_t));
 		
-            // TODO: Execute the programs in batch size chunks
+            // * Execute the programs in batch size chunks
             for (int j = 0; j < curr_batch_size; j++) {
                 execute_solution(executable_paths[tested], argv[i], j);
 		        tested++;
             }
 
-            // TODO (Change 3): Setup timer to determine if child process is stuck
+            // * (Change 3): Setup timer to determine if child process is stuck
             start_timer(TIMEOUT_SECS, timeout_handler);  // Implement this function (src/utils.c)
 
-            // TODO: Wait for the batch to finish and check results
+            // * Wait for the batch to finish and check results
             monitor_and_evaluate_solutions(tested, argv[i], i - 2);
 
-            // TODO: Cancel the timer if all child processes have finished
+            // * Cancel the timer if all child processes have finished
             if (child_status == NULL) {
                 cancel_timer();  // Implement this function (src/utils.c)
             }
