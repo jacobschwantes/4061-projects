@@ -40,10 +40,10 @@ void execute_solution(char *executable_path, int param, int batch_idx) {
     // Child process
     if (pid == 0) {
         char *executable_name = get_exe_name(executable_path);
-
+        
         // * Redirect STDOUT to output/<executable>.<input> file
         char output_file_name[256];
-        snprintf(output_file_name, sizeof(output_file_name), "output/%s.%s", executable_name, input);
+        snprintf(output_file_name, sizeof(output_file_name), "output/%s.%d", executable_name, param);
         
         int fd = open(output_file_name, O_WRONLY | O_CREAT, 0666);
         if(fd == -1){
@@ -57,7 +57,10 @@ void execute_solution(char *executable_path, int param, int batch_idx) {
         }
         close(fd);
         // * Input to child program can be handled as in the EXEC case (see template.c)
-        execl(executable_path, executable_name, param, NULL);
+        char param_str[20]; 
+        snprintf(param_str, sizeof(param_str), "%d", param);
+
+        execl(executable_path, executable_name, param_str, NULL);
         
         perror("Failed to execute program in worker");
         exit(1);
@@ -104,7 +107,29 @@ void monitor_and_evaluate_solutions(int finished) {
         //       the status field of the pairs_t struct (e.g. CORRECT, INCORRECT, SEGFAULT, etc.)
         //       This should be the same as the evaluation in autograder.c, just updating `pairs` 
         //       instead of `results`.
+        if(exited){
+            char output_file_name[256];
+            char *exec_name = get_exe_name(current_exe_path);
+            snprintf(output_file_name, sizeof(output_file_name), "output/%s.%d", exec_name, current_param);
 
+            FILE *fd = fopen(output_file_name, "r");
+            char in_file = fgetc(fd);
+            if(in_file == '0'){
+                pairs[finished + j].status = CORRECT;
+            }
+            else{
+                pairs[finished + j].status = INCORRECT;
+            }
+        }
+        else if(signaled){
+            int sig = WTERMSIG(status);
+            if(sig == SIGKILL || sig == SIGALRM){
+                pairs[finished + j].status = STUCK_OR_INFINITE;
+            }
+            else{
+                pairs[finished + j].status = SEGFAULT;
+            }
+        }
 
         // Mark the process as finished
         child_status[j] = -1;
@@ -117,12 +142,26 @@ void monitor_and_evaluate_solutions(int finished) {
 // Send results for the current batch back to the autograder
 void send_results(int msqid, long mtype, int finished) {
     // Format of message should be ("%s %d %d", executable_path, parameter, status)
-
+    msgbuf_t message;
+    message.mtype = mtype;
+    snprintf(message.mtext, sizeof(message.mtext), "%s %d %d", pairs[finished].executable_path, pairs[finished].parameter, pairs[finished].status);
+    if(msgsnd(msqid,  &message, sizeof(message.mtext), 0) == -1){
+        perror("failed to send results");
+        exit(1);
+    }
 }
 
 
 // Send DONE message to autograder to indicate that the worker has finished testing
 void send_done_msg(int msqid, long mtype) {
+    msgbuf_t message;
+    message.mtype = mtype;
+    strncpy(message.mtext, "DONE", MESSAGE_SIZE);
+
+    if(msgsnd(msqid,  &message, sizeof(message.mtext), 0) == -1){
+        perror("failed to send DONE message");
+        exit(1);
+    }
 
 }
 
@@ -135,20 +174,46 @@ int main(int argc, char **argv) {
 
     int msqid = atoi(argv[1]);
     worker_id = atoi(argv[2]);
-
+    msgbuf_t message;
     // TODO: Receive initial message from autograder specifying the number of (executable, parameter) 
     // pairs that the worker will test (should just be an integer in the message body). (mtype = worker_id)
-
+    message.mtype = worker_id;
+    if(msgrcv(msqid,  &message, sizeof(message.mtext), worker_id, 0) == -1){
+        perror("failed to receive initial message");
+        exit(1);
+    }
     // TODO: Parse message and set up pairs_t array
-    int pairs_to_test;
+    int pairs_to_test = atoi(message.mtext);
+    pairs = malloc(pairs_to_test * sizeof(pairs_t));
 
     // TODO: Receive (executable, parameter) pairs from autograder and store them in pairs_t array.
     //       Messages will have the format ("%s %d", executable_path, parameter). (mtype = worker_id)
+    message.mtype = worker_id;
+    for(int i = 0; i < pairs_to_test; i++){
+        if(msgrcv(msqid,  &message, sizeof(message.mtext), worker_id, 0) == -1){
+            perror("failed to receive (exec, param) pair");
+            exit(1);
+        }
+        char exec_path[256];
+        int param;
+        sscanf(message.mtext, "%s %d", exec_path, &param);
+        pairs[i].executable_path = strdup(exec_path);
+        pairs[i].parameter = param;
+    }
 
     // TODO: Send ACK message to mq_autograder after all pairs received (mtype = BROADCAST_MTYPE)
-
+    message.mtype = BROADCAST_MTYPE;
+    strcpy(message.mtext, "ACK");
+    if(msgsnd(msqid,  &message, strlen(message.mtext) + 1, 0) == -1){
+        perror("Failed to send ACK");
+        exit(1);
+    }
     // TODO: Wait for SYNACK from autograder to start testing (mtype = BROADCAST_MTYPE).
     //       Be careful to account for the possibility of receiving ACK messages just sent.
+    if(msgrcv(msqid, &message, sizeof(message.mtext), BROADCAST_MTYPE, 0) == -1){
+        perror("Failed to receive SYNACK");
+        exit(1);
+    }
 
 
     // Run the pairs in batches of 8 and send results back to autograder
@@ -163,7 +228,7 @@ int main(int argc, char **argv) {
         }
 
         // * Setup timer to determine if child process is stuck
-            start_timer(TIMEOUT_SECS, timeout_handler);  // Implement this function (src/utils.c)
+        start_timer(TIMEOUT_SECS, timeout_handler);  // Implement this function (src/utils.c)
 
         // TODO: Wait for the batch to finish and check results
         monitor_and_evaluate_solutions(i);
@@ -176,7 +241,7 @@ int main(int argc, char **argv) {
         // TODO: Send batch results (intermediate results) back to autograder
         send_results(msqid, worker_id, i);
 
-        free(pids);
+        // free(pids);
     }
 
     // TODO: Send DONE message to autograder to indicate that the worker has finished testing
