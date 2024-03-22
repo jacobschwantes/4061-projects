@@ -29,18 +29,25 @@ int main(int argc, char *argv[]) {
 
     int param = 0;
 
-    // TODO: Get input param from the different sources
+    // * Get input param from the different sources
     #ifdef EXEC
-        
+        param = atoi(argv[1]);
 
     #elif REDIR
-       
+        char input;
+        scanf("%c", &input);
+        int x = input - '0';
+        param = x;
         
     #elif PIPE
-
+        char input;
+        read(atoi(argv[1]), &input, sizeof(input));
+        int x = input - '0';
+        param = x;
+        close(atoi(argv[1]));
 
     #elif MQUEUE
-
+        param = atoi(argv[1]);
 
     #endif
 

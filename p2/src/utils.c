@@ -115,6 +115,7 @@ void create_input_files(char **argv_params, int num_parameters) {
             perror("Failed to create input file");
             exit(1);
         }
+        write(fd, argv_params[i], sizeof(argv_params[i]));
         close(fd);
     }
 }

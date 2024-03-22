@@ -84,8 +84,9 @@ void execute_solution(char *executable_path, char *input, int batch_idx) {
                 perror("Failed to redirect stdin to read end of pipe");
                 exit(1);
             }
-            close(ends[0]);
-            execl(executable_path, executable_name, input, NULL);
+            char pipe_input[256];
+            snprintf(pipe_input, sizeof(pipe_input), "%d", ends[0]);
+            execl(executable_path, executable_name, pipe_input, NULL);
 
         #endif
 

@@ -161,8 +161,8 @@ int main(int argc, char *argv[]) {
     // TODO: Wait for all workers to finish and collect their results from message queue
     wait_for_workers(msqid, num_pairs_to_test, argv + 2);
 
-    // TODO: Remove ALL output files (output/<executable>.<input>)
-
+    // ? Remove ALL output files (output/<executable>.<input>)
+    remove_output_files(results, sent, curr_batch_size, argv[i]);
 
     write_results_to_file(results, num_executables, total_params);
 

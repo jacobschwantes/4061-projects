@@ -21,9 +21,14 @@ int curr_batch_size;   // At most PAIRS_BATCH_SIZE (executable, parameter) pairs
 long worker_id;        // Used for sending/receiving messages from the message queue
 
 
-// TODO: Timeout handler for alarm signal - should be the same as the one in autograder.c
+// * Timeout handler for alarm signal - should be the same as the one in autograder.c
 void timeout_handler(int signum) {
-
+    for(int i = 0; i < curr_batch_size; i++){
+        if(child_status[i] == 1){
+            kill(pids[i], SIGKILL);
+            child_status[i] = -1;
+        }
+    }
 }
 
 
@@ -36,9 +41,23 @@ void execute_solution(char *executable_path, int param, int batch_idx) {
     if (pid == 0) {
         char *executable_name = get_exe_name(executable_path);
 
-        // TODO: Redirect STDOUT to output/<executable>.<input> file
-
-        // TODO: Input to child program can be handled as in the EXEC case (see template.c)
+        // * Redirect STDOUT to output/<executable>.<input> file
+        char output_file_name[256];
+        snprintf(output_file_name, sizeof(output_file_name), "output/%s.%s", executable_name, input);
+        
+        int fd = open(output_file_name, O_WRONLY | O_CREAT, 0666);
+        if(fd == -1){
+            // perror("Failed to open output file");
+            fprintf(stderr, "Failed to open output file: %s\n", output_file_name);
+            exit(1);
+        }
+        if(dup2(fd, 1) == -1){
+            perror("Failed to redirect");
+            exit(1);
+        }
+        close(fd);
+        // * Input to child program can be handled as in the EXEC case (see template.c)
+        execl(executable_path, executable_name, param, NULL);
         
         perror("Failed to execute program in worker");
         exit(1);
@@ -71,8 +90,10 @@ void monitor_and_evaluate_solutions(int finished) {
         int status;
         pid_t pid = waitpid(pids[j], &status, 0);
 
-        // TODO: What if waitpid is interrupted by a signal?
-
+        // * What if waitpid is interrupted by a signal?
+        while(pid == -1 && errno == EINTR){
+            pid = waitpid(pids[j], &status, 0);
+        }
 
         int exit_status = WEXITSTATUS(status);
         int exited = WIFEXITED(status);
@@ -137,17 +158,17 @@ int main(int argc, char **argv) {
         pids = malloc(curr_batch_size * sizeof(pid_t));
 
         for (int j = 0; j < curr_batch_size; j++) {
-            // TODO: Execute the student executable
+            // * Execute the student executable
             execute_solution(pairs[i + j].executable_path, pairs[i + j].parameter, j);
         }
 
-        // TODO: Setup timer to determine if child process is stuck
+        // * Setup timer to determine if child process is stuck
             start_timer(TIMEOUT_SECS, timeout_handler);  // Implement this function (src/utils.c)
 
         // TODO: Wait for the batch to finish and check results
         monitor_and_evaluate_solutions(i);
 
-        // TODO: Cancel the timer if all child processes have finished
+        // * Cancel the timer if all child processes have finished
         if (child_status == NULL) {
             cancel_timer();
         }
