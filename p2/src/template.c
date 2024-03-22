@@ -54,15 +54,16 @@ int main(int argc, char *argv[]) {
         case 1:
             // Using fprintf(stderr, ...) since STDOUT is redirected to a file
             fprintf(stderr, "Program: %s, PID: %d, Mode: 1 - Exiting with status 0 (Correct answer)\n", argv[0], pid);
-            // TODO: Write the result (0) to the output file (output/<executable>.<input>)
+            // * Write the result (0) to the output file (output/<executable>.<input>)
+            printf("0\n");
             //       Do not open the file. Think about what function you can use to output
             //       information given what you redirected in the autograder.c file.
 
             break;
         case 2:
             fprintf(stderr, "Program: %s, PID: %d, Mode: 2 - Exiting with status 1 (Incorrect answer)\n", argv[0], pid);
-            // TODO: Write the result (1) to the output file (same as case 1 above)
-            
+            // * Write the result (1) to the output file (same as case 1 above)
+            printf("1\n");
             break;
         case 3:
             fprintf(stderr, "Program: %s, PID: %d, Mode: 3 - Triggering a segmentation fault\n", argv[0], pid);

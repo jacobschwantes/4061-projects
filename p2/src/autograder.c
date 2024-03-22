@@ -139,8 +139,16 @@ void monitor_and_evaluate_solutions(int tested, char *param, int param_idx) {
         int exited = WIFEXITED(status);
         int signaled = WIFSIGNALED(status);
 
+        // NOTE Make sure you are using the output/<executable>.<input> file to determine the status
+        //       of the child process, NOT the exit status like in Project 1.
         if(exited){
-            if(exit_status == 1){
+            char output_file_name[256];
+            char *exec_name = get_exe_name(results[tested - curr_batch_size + j].exe_path);
+            snprintf(output_file_name, sizeof(output_file_name), "output/%s.%s", exec_name, param);
+
+            FILE *fd = fopen(output_file_name, "r");
+            char in_file = fgetc(fd);
+            if(in_file == '0'){
                 results[tested - curr_batch_size + j].status[param_idx] = CORRECT;
             }
             else{
@@ -160,8 +168,7 @@ void monitor_and_evaluate_solutions(int tested, char *param, int param_idx) {
         
         // * Also, update the results struct with the status of the child process. This is done in the if statements above
 
-        // NOTE: Make sure you are using the output/<executable>.<input> file to determine the status
-        //       of the child process, NOT the exit status like in Project 1.
+
 
 
         // Adding tested parameter to results struct
