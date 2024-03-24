@@ -31,12 +31,12 @@ void launch_worker(int msqid, int pairs_per_worker, int worker_id) {
     } 
     // Parent process
     else if (pid > 0) {
-        // TODO: Send the total number of pairs to worker via message queue (mtype = worker_id)
+        // * Send the total number of pairs to worker via message queue (mtype = worker_id)
         msgbuf_t message;
         message.mtype = worker_id;
-        sprintf(message.mtext, "%d", pairs_per_worker);
-        if(msgsnd(msqid,  &message, sizeof(message.mtext), 0) == -1){
-            perror("failed to send message");
+        snprintf(message.mtext, sizeof(message.mtext), "%d", pairs_per_worker);
+        if(msgsnd(msqid, &message, strlen(message.mtext) + 1, 0) == -1){
+            perror("Failed to send pairs_per_worker");
             exit(1);
         }
 
@@ -51,27 +51,31 @@ void launch_worker(int msqid, int pairs_per_worker, int worker_id) {
 }
 
 
-// TODO: Receive ACK from all workers using message queue (mtype = BROADCAST_MTYPE)
+// * Receive ACK from all workers using message queue (mtype = BROADCAST_MTYPE)
 void receive_ack_from_workers(int msqid, int num_workers) {
     msgbuf_t message;
-    for(int i = 0; i < num_workers; i++){
-        if(msgrcv(msqid,  &message, sizeof(message.mtext), BROADCAST_MTYPE, 0) == -1){
-            perror("failed to receive ACK message");
+    int ACK_received = 0;
+    while(ACK_received < num_workers){
+        if(msgrcv(msqid, &message, sizeof(message.mtext), BROADCAST_MTYPE, 0) == -1){
+            perror("Failed to receive ACK message");
             exit(1);
+        }
+        if(strcmp(message.mtext, "ACK") == 0){
+            ACK_received++;
+            // printf("ACK received\n");
         }
     }
 }
 
 
-// TODO: Send SYNACK to all workers using message queue (mtype = BROADCAST_MTYPE)
+// * Send SYNACK to all workers using message queue (mtype = BROADCAST_MTYPE)
 void send_synack_to_workers(int msqid, int num_workers) {
     msgbuf_t message;
     message.mtype = BROADCAST_MTYPE;
-    strcpy(message.mtext, "SYNACK");
-    printf("%s\n", message.mtext);
+    snprintf(message.mtext, sizeof(message.mtext), "%s", "SYNACK");
     for(int i = 0; i < num_workers; i++){
-        if(msgsnd(msqid,  &message, sizeof(message.mtext), 0) == -1){
-            perror("failed to send SYNACK message");
+        if(msgsnd(msqid, &message, sizeof(message.mtext), 0) == -1) {
+            perror("Failed to send SYNACK");
             exit(1);
         }
     }
@@ -112,26 +116,45 @@ void wait_for_workers(int msqid, int pairs_to_test, char **argv_params) {
             //       If message is "DONE", set worker_done[i] to 1 and break out of loop.
             //       Messages will have the format ("%s %d %d", executable_path, parameter, status)
             //       so consider using sscanf() to parse the message.
-            char exec_path[100];
-            int parameter;
-            int status;
             msgbuf_t message;
             while (1) {
-                if(msgrcv(msqid, &message, sizeof(message.mtext), workers[i], msgflg) == -1){
-                    perror("Failed to receive results from worker");
-                    exit(1);
+                // printf("in wait for workers while(1) loop\n");
+                char executable_path[128];
+                int parameter, status;
+                if (msgrcv(msqid, &message, sizeof(message.mtext), i + 1, msgflg) == -1){
+                    if(errno == ENOMSG){
+                        continue;
+                    }
+                    else{
+                        perror("Failed to receive results from worker");
+                        exit(1);
+                    }
                 }
                 if(strcmp(message.mtext, "DONE") == 0){
+                    // printf("entered check for DONE\n");
                     worker_done[i] = 1;
                     received++;
                     break;
                 }
-                break;
+                else if(sscanf(message.mtext, "%s %d %d", executable_path, &parameter, &status) == 3){
+                    // printf("entered scanf for mtext\n");
+                    // results[i].exe_path = executable_path;
+                    for(int j = 0; j  < num_executables; j++){
+                        if(strcmp(results[j].exe_path, executable_path) == 0){
+                            int param_index = parameter - 1;
+                            if(param_index >= 0  && param_index < total_params){
+                                results[j].params_tested[param_index] = parameter;
+                                results[j].status[param_index] = status;
+                                // printf("%s %d %d\n", executable_path, parameter, status);
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                
             }
-            sscanf(message.mtext, "%s %d %d", exec_path, &parameter, &status);
-            results[i].exe_path = exec_path;
-            results[i].params_tested = &parameter;
-            results[i].status = &status;
+            // printf("results stored\n");
             
         }
     }
@@ -180,7 +203,7 @@ int main(int argc, char *argv[]) {
         int leftover = num_pairs_to_test % num_workers - i > 0 ? 1 : 0;
         int pairs_per_worker = num_pairs_to_test / num_workers + leftover;
 
-        // TODO: Spawn worker and send it the number of pairs it will test via message queue
+        // * Spawn worker and send it the number of pairs it will test via message queue
         launch_worker(msqid, pairs_per_worker, i + 1);
     }
 
@@ -190,7 +213,7 @@ int main(int argc, char *argv[]) {
         for (int j = 0; j < num_executables; j++) {
             msgbuf_t msg;
             long worker_id = sent % num_workers + 1;
-            // TODO: Send (executable, parameter) pair to worker via message queue (mtype = worker_id)
+            // * Send (executable, parameter) pair to worker via message queue (mtype = worker_id)
             msg.mtype = worker_id;
             snprintf(msg.mtext, sizeof(msg.mtext), "%s %d", executable_paths[j], i + 1);
             if(msgsnd(msqid,  &msg, sizeof(msg.mtext), 0) == -1){
@@ -201,18 +224,18 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // TODO: Wait for ACK from workers to tell all workers to start testing (synchronization)
+    // * Wait for ACK from workers to tell all workers to start testing (synchronization)
     receive_ack_from_workers(msqid, num_workers);
 
-    // TODO: Send message to workers to allow them to start testing
+    // * Send message to workers to allow them to start testing
     send_synack_to_workers(msqid, num_workers);
 
-    // TODO: Wait for all workers to finish and collect their results from message queue
+    // * Wait for all workers to finish and collect their results from message queue
     wait_for_workers(msqid, num_pairs_to_test, argv + 2);
 
     // * Remove ALL output files (output/<executable>.<input>)
     for(int i = 0; i < total_params; i++){
-        remove_output_files(results, sent, num_executables, argv[i]);
+        remove_output_files(results, sent, num_executables, argv[i+2]);
     }
 
     write_results_to_file(results, num_executables, total_params);

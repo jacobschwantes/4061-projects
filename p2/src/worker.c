@@ -40,15 +40,16 @@ void execute_solution(char *executable_path, int param, int batch_idx) {
     // Child process
     if (pid == 0) {
         char *executable_name = get_exe_name(executable_path);
-        
+
         // * Redirect STDOUT to output/<executable>.<input> file
+
+        // * Input to child program can be handled as in the EXEC case (see template.c)
         char output_file_name[256];
         snprintf(output_file_name, sizeof(output_file_name), "output/%s.%d", executable_name, param);
-        
         int fd = open(output_file_name, O_WRONLY | O_CREAT, 0666);
         if(fd == -1){
-            // perror("Failed to open output file");
-            fprintf(stderr, "Failed to open output file: %s\n", output_file_name);
+            perror("Failed to open output file");
+            // fprintf(stderr, "Failed to open output file: %s\n", output_file_name);
             exit(1);
         }
         if(dup2(fd, 1) == -1){
@@ -56,12 +57,10 @@ void execute_solution(char *executable_path, int param, int batch_idx) {
             exit(1);
         }
         close(fd);
-        // * Input to child program can be handled as in the EXEC case (see template.c)
-        char param_str[20]; 
-        snprintf(param_str, sizeof(param_str), "%d", param);
+        char param_s[10];
+        sprintf(param_s, "%d", param);
+        execl(executable_path, executable_name, param_s, NULL);
 
-        execl(executable_path, executable_name, param_str, NULL);
-        
         perror("Failed to execute program in worker");
         exit(1);
     }
@@ -130,7 +129,7 @@ void monitor_and_evaluate_solutions(int finished) {
                 pairs[finished + j].status = SEGFAULT;
             }
         }
-
+        // printf("finished eval: %s %d\n", pairs[finished + j].executable_path, pairs[finished + j].parameter);
         // Mark the process as finished
         child_status[j] = -1;
     }
@@ -144,11 +143,14 @@ void send_results(int msqid, long mtype, int finished) {
     // Format of message should be ("%s %d %d", executable_path, parameter, status)
     msgbuf_t message;
     message.mtype = mtype;
-    snprintf(message.mtext, sizeof(message.mtext), "%s %d %d", pairs[finished].executable_path, pairs[finished].parameter, pairs[finished].status);
-    if(msgsnd(msqid,  &message, sizeof(message.mtext), 0) == -1){
-        perror("failed to send results");
-        exit(1);
+    for(int i = 0; i < curr_batch_size; i++){
+        snprintf(message.mtext, sizeof(message.mtext), "%s %d %d", pairs[finished + i].executable_path, pairs[finished + i].parameter, pairs[finished + i].status);
+        if(msgsnd(msqid,  &message, sizeof(message.mtext), 0) == -1){
+            perror("failed to send results");
+            exit(1);
+        }
     }
+    // printf("results sent\n");
 }
 
 
@@ -156,13 +158,12 @@ void send_results(int msqid, long mtype, int finished) {
 void send_done_msg(int msqid, long mtype) {
     msgbuf_t message;
     message.mtype = mtype;
-    strncpy(message.mtext, "DONE", MESSAGE_SIZE);
-
+    strncpy(message.mtext, "DONE", sizeof(message.mtext));
     if(msgsnd(msqid,  &message, sizeof(message.mtext), 0) == -1){
         perror("failed to send DONE message");
         exit(1);
     }
-
+    // printf("DONE sent\n");
 }
 
 
@@ -174,21 +175,21 @@ int main(int argc, char **argv) {
 
     int msqid = atoi(argv[1]);
     worker_id = atoi(argv[2]);
-    msgbuf_t message;
-    // TODO: Receive initial message from autograder specifying the number of (executable, parameter) 
+
+    // * Receive initial message from autograder specifying the number of (executable, parameter) 
     // pairs that the worker will test (should just be an integer in the message body). (mtype = worker_id)
-    message.mtype = worker_id;
-    if(msgrcv(msqid,  &message, sizeof(message.mtext), worker_id, 0) == -1){
-        perror("failed to receive initial message");
+    msgbuf_t message;
+    if(msgrcv(msqid, &message, sizeof(message.mtext), worker_id, 0) == -1){
+        perror("Failed to receive initial message");
         exit(1);
     }
-    // TODO: Parse message and set up pairs_t array
-    int pairs_to_test = atoi(message.mtext);
+    // * Parse message and set up pairs_t array
+    int pairs_to_test;
+    pairs_to_test = atoi(message.mtext);
     pairs = malloc(pairs_to_test * sizeof(pairs_t));
 
-    // TODO: Receive (executable, parameter) pairs from autograder and store them in pairs_t array.
+    // * Receive (executable, parameter) pairs from autograder and store them in pairs_t array.
     //       Messages will have the format ("%s %d", executable_path, parameter). (mtype = worker_id)
-    message.mtype = worker_id;
     for(int i = 0; i < pairs_to_test; i++){
         if(msgrcv(msqid,  &message, sizeof(message.mtext), worker_id, 0) == -1){
             perror("failed to receive (exec, param) pair");
@@ -199,20 +200,33 @@ int main(int argc, char **argv) {
         sscanf(message.mtext, "%s %d", exec_path, &param);
         pairs[i].executable_path = strdup(exec_path);
         pairs[i].parameter = param;
+        pairs[i].status = 0;
     }
-
-    // TODO: Send ACK message to mq_autograder after all pairs received (mtype = BROADCAST_MTYPE)
+    // * Send ACK message to mq_autograder after all pairs received (mtype = BROADCAST_MTYPE)
     message.mtype = BROADCAST_MTYPE;
-    strcpy(message.mtext, "ACK");
-    if(msgsnd(msqid,  &message, strlen(message.mtext) + 1, 0) == -1){
-        perror("Failed to send ACK");
+    sprintf(message.mtext, "%s", "ACK");
+    if(msgsnd(msqid, &message, sizeof(message.mtext), 0) == -1){
+        perror("Failed to send ACK msg");
         exit(1);
     }
-    // TODO: Wait for SYNACK from autograder to start testing (mtype = BROADCAST_MTYPE).
+    // * Wait for SYNACK from autograder to start testing (mtype = BROADCAST_MTYPE).
     //       Be careful to account for the possibility of receiving ACK messages just sent.
-    if(msgrcv(msqid, &message, sizeof(message.mtext), BROADCAST_MTYPE, 0) == -1){
-        perror("Failed to receive SYNACK");
-        exit(1);
+    while(1){
+        if(msgrcv(msqid, &message, sizeof(message.mtext), BROADCAST_MTYPE, 0) == -1){
+            perror("Failed to receive SYNACK");
+            exit(1);
+        }
+        if(strcmp(message.mtext, "SYNACK") == 0){
+            // printf("SYNACK received\n");
+            break;
+        }
+        else{
+            // if not a SYNACK message, then it's an ACK. Resend the message until autograder receives it
+            if(msgsnd(msqid, &message, sizeof(message.mtext), 0) == -1){
+                perror("Failed to resend ACK");
+                exit(1);
+            }
+        }
     }
 
 
@@ -228,9 +242,9 @@ int main(int argc, char **argv) {
         }
 
         // * Setup timer to determine if child process is stuck
-        start_timer(TIMEOUT_SECS, timeout_handler);  // Implement this function (src/utils.c)
+            start_timer(TIMEOUT_SECS, timeout_handler);  // Implement this function (src/utils.c)
 
-        // TODO: Wait for the batch to finish and check results
+        // * Wait for the batch to finish and check results
         monitor_and_evaluate_solutions(i);
 
         // * Cancel the timer if all child processes have finished
@@ -238,13 +252,13 @@ int main(int argc, char **argv) {
             cancel_timer();
         }
 
-        // TODO: Send batch results (intermediate results) back to autograder
+        // * Send batch results (intermediate results) back to autograder
         send_results(msqid, worker_id, i);
 
-        // free(pids);
+        free(pids);
     }
 
-    // TODO: Send DONE message to autograder to indicate that the worker has finished testing
+    // * Send DONE message to autograder to indicate that the worker has finished testing
     send_done_msg(msqid, worker_id);
 
     // Free the pairs_t array
@@ -253,5 +267,5 @@ int main(int argc, char **argv) {
     }
     free(pairs);
 
-    free(pids);
+    // free(pids);
 }
