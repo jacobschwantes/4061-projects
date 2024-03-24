@@ -86,6 +86,7 @@ void execute_solution(char *executable_path, char *input, int batch_idx) {
             }
             char pipe_input[256];
             snprintf(pipe_input, sizeof(pipe_input), "%d", ends[0]);
+            close(ends[0]);
             execl(executable_path, executable_name, pipe_input, NULL);
 
         #endif
