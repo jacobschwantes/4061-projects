@@ -134,7 +134,7 @@ void start_timer(int seconds, void (*timeout_handler)(int)) {
     interval.it_value.tv_sec = seconds;
     interval.it_value.tv_usec = 0;
     setitimer(ITIMER_REAL, &interval, NULL);
-    printf("Timer started\n");
+
 }
 
 
@@ -147,7 +147,7 @@ void cancel_timer() {
     interval.it_value.tv_sec = 0;
     interval.it_value.tv_usec = 0;
     setitimer(ITIMER_REAL, &interval, NULL);
-    printf("Timer canceled");
+    
 }
 
 
