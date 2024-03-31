@@ -67,12 +67,12 @@ typedef struct request_queue
     char *buffer;
 }request_t; 
 
-typedef struct request_detials
+typedef struct request_details
 {
   char buffer[1028];
   long filelength;
   char file_name[1028];
-} request_detials_t;
+} request_details_t;
 
 typedef struct packet {
   unsigned int size;

@@ -7,6 +7,8 @@ FILE *logfile;          // Global file pointer to the log file
 int queue_len = 0;      // Global integer to indicate the length of the queue
 
 database_entry_t database[100];
+pthread_t worker_thread[MAX_THREADS];
+pthread_t dispatcher_thread[MAX_THREADS];
 int image_count = 0;
 
 /* TODO: Intermediate Submission
@@ -81,7 +83,7 @@ void LogPrettyPrint(FILE *to_write, int threadId, int requestNumber, char *file_
 {
 }
 /*
-  TODO: Implement this function for Intermediate Submission
+  DONE Implement this function for Intermediate Submission
   * loadDatabase
     - parameters:
         - path is the path to the directory containing the images
@@ -126,7 +128,6 @@ void loadDatabase(char *path)
       continue;
     }
     off_t file_size = statbuf.st_size;
-    printf("file_size: %d\n", file_size);
     FILE *file;
     database[image_count].file_name = malloc(BUFF_SIZE);
     database[image_count].buffer = malloc(file_size);
@@ -140,8 +141,6 @@ void loadDatabase(char *path)
     strcpy(database[image_count].file_name, entry->d_name);
 
     // Open and read file contents into a buffer
-
-    printf("filepath: %s\n", filepath);
     file = fopen(filepath, "rb");
     if (!file)
     {
@@ -154,11 +153,6 @@ void loadDatabase(char *path)
     {
       perror("fread failed");
     }
-    else
-    {
-      // Read the file into the buffer
-      printf("File: %s, Size: %ld bytes\n", entry->d_name, file_size);
-    }
 
     fclose(file);
     image_count++;
@@ -168,21 +162,32 @@ void loadDatabase(char *path)
 
 void *dispatch(void *arg)
 {
+  printf("Dispatcher thread_id: %d\n", *((int *)arg));
   while (1)
   {
     size_t file_size = 0;
-    request_detials_t request_details;
+    request_details_t request_details;
 
-    /* TODO: Intermediate Submission
+    /* DONE Intermediate Submission
      *    Description:      Accept client connection
      *    Utility Function: int accept_connection(void)
      */
+    int socketfd = accept_connection();
+    if (socketfd < 0)
+    {
+      printf("ignoring connection\n");
+      return NULL;
+    }
 
-    /* TODO: Intermediate Submission
+    /* DONE Intermediate Submission
      *    Description:      Get request from client
      *    Utility Function: char * get_request_server(int fd, size_t *filelength)
      */
+    strcpy(request_details.buffer, get_request_server(socketfd, &file_size));
+    request_details.filelength = file_size;
 
+    printf("Request recieved with file size: %ld\n", request_details.filelength);
+    return NULL;
     /* TODO
      *    Description:      Add the request into the queue
          //(1) Copy the filename from get_request_server into allocated memory to put on request queue
@@ -199,7 +204,6 @@ void *dispatch(void *arg)
          //(6) Release the lock on the request queue and signal that the queue is not empty anymore
     */
   }
-  return NULL;
 }
 
 void *worker(void *arg)
@@ -210,11 +214,13 @@ void *worker(void *arg)
   void *memory = NULL; // memory pointer where contents being requested are read and stored
   int fd = INVALID;    // Integer to hold the file descriptor of incoming request
   char *mybuf;         // String to hold the contents of the file being requested
-
-  /* TODO : Intermediate Submission
+  int ID;
+  /* DONE : Intermediate Submission
    *    Description:      Get the id as an input argument from arg, set it to ID
    */
-
+  ID = *((int *)arg);
+  printf("Worker thread_id: %d\n", ID);
+  return NULL;
   while (1)
   {
     /* TODO
@@ -267,7 +273,7 @@ int main(int argc, char *argv[])
    *    Hint:             Use Global "File* logfile", use "server_log" as the name, what open flags do you want?
    */
 
-  logfile = fopen("server_log.txt", "w");
+  logfile = fopen(LOG_FILE_NAME, "w");
   if (logfile == NULL)
   {
     perror("failed to open server_log");
@@ -285,32 +291,56 @@ int main(int argc, char *argv[])
    */
   loadDatabase(path);
 
-  /* TODO: Intermediate Submission
+  /* DONE Intermediate Submission
    *    Description:      Create dispatcher and worker threads
    *    Hints:            Use pthread_create, you will want to store pthread's globally
    *                      You will want to initialize some kind of global array to pass in thread ID's
    *                      How should you track this p_thread so you can terminate it later? [global]
    */
+  int dispatcher_ids[num_dispatcher];
+  int dispatch_result;
+  for (int i = 0; i < num_dispatcher; i++)
+  {
+    dispatcher_ids[i] = i;
+    dispatch_result = pthread_create(&dispatcher_thread[i], NULL, dispatch, (void *)&dispatcher_ids[i]);
+    if (dispatch_result != 0)
+    {
+      perror("failed to create dispatcher thread");
+      exit(1);
+    }
+  }
+  int worker_result;
+  int worker_ids[num_worker];
+  for (int i = 0; i < num_worker; i++)
+  {
+    worker_ids[i] = i;
+    worker_result = pthread_create(&worker_thread[i], NULL, worker, (void *)&worker_ids[i]);
+    if (worker_result != 0)
+    {
+      perror("failed to create worker thread");
+      exit(1);
+    }
+  }
 
   // Wait for each of the threads to complete their work
   // Threads (if created) will not exit (see while loop), but this keeps main from exiting
-  // int i;
-  // for (i = 0; i < num_dispatcher; i++)
-  // {
-  //   fprintf(stderr, "JOINING DISPATCHER %d \n", i);
-  //   if ((pthread_join(dispatcher_thread[i], NULL)) != 0)
-  //   {
-  //     printf("ERROR : Fail to join dispatcher thread %d.\n", i);
-  //   }
-  // }
-  // for (i = 0; i < num_worker; i++)
-  // {
-  //   // fprintf(stderr, "JOINING WORKER %d \n",i);
-  //   if ((pthread_join(worker_thread[i], NULL)) != 0)
-  //   {
-  //     printf("ERROR : Fail to join worker thread %d.\n", i);
-  //   }
-  // }
+  int i;
+  for (i = 0; i < num_dispatcher; i++)
+  {
+    fprintf(stderr, "JOINING DISPATCHER %d \n", i);
+    if ((pthread_join(dispatcher_thread[i], NULL)) != 0)
+    {
+      printf("ERROR : Fail to join dispatcher thread %d.\n", i);
+    }
+  }
+  for (i = 0; i < num_worker; i++)
+  {
+    fprintf(stderr, "JOINING WORKER %d \n", i);
+    if ((pthread_join(worker_thread[i], NULL)) != 0)
+    {
+      printf("ERROR : Fail to join worker thread %d.\n", i);
+    }
+  }
   for (int i = 0; i < image_count; i++)
   {
     free(database[i].buffer);
