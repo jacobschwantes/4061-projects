@@ -162,7 +162,7 @@ void loadDatabase(char *path)
 
 void *dispatch(void *arg)
 {
-  printf("Dispatcher thread_id: %d\n", *((int *)arg));
+  printf("Dispatch ID: %d\n", *((int *)arg));
   while (1)
   {
     size_t file_size = 0;
@@ -186,7 +186,7 @@ void *dispatch(void *arg)
     strcpy(request_details.buffer, get_request_server(socketfd, &file_size));
     request_details.filelength = file_size;
 
-    printf("Request recieved with file size: %ld\n", request_details.filelength);
+    printf("Request file size: %ld\n", request_details.filelength);
     return NULL;
     /* TODO
      *    Description:      Add the request into the queue
@@ -219,7 +219,7 @@ void *worker(void *arg)
    *    Description:      Get the id as an input argument from arg, set it to ID
    */
   ID = *((int *)arg);
-  printf("Worker thread_id: %d\n", ID);
+  printf("Worker ID: %d\n", ID);
   return NULL;
   while (1)
   {
