@@ -52,10 +52,29 @@ void *request_handle(void *args)
         close(socket);
         return NULL;
     }
+    printf("made it here\n");
 
+    char output_dir[BUFFER_SIZE];
+
+    printf("made it here 2\n");
+
+    snprintf(output_dir, sizeof(output_dir), "%s/%s", output_path, req_entries[index].file_name);
+
+    printf("output dir: %s\n", output_dir);
+    if (receive_file_from_server(socket, output_dir) < 0)
+    {
+        printf("made it here 5\n");
+        perror("Failed to recieve file from server");
+    } else {
+        printf("made it here 4\n");
+    }
+
+    printf("made it here 3\n");
     // Cleanup
     fclose(file);
     close(socket);
+
+    printf("client thread %d is about to exit\n", req_entries[index].number_worker);
 
     return NULL;
 }

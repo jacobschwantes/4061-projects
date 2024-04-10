@@ -92,7 +92,7 @@ typedef struct database_entry
 void * dispatch(void *arg);
 void * worker(void *args); 
 void loadDatabase(char *path);
-void LogPrettyPrint(FILE* to_write, int threadId, int requestNumber, char * file_name, int file_size);
+void LogPrettyPrint(FILE* to_write, int threadId, int requestNumber, char * file_name, int file_size, int socket_fd);
 database_entry_t image_match(char *input_image, int size);
 
 #endif
