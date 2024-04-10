@@ -22,7 +22,7 @@ processing_args_t req_entries[100];
 void *request_handle(void *args)
 {
     int index = *((int *)args);
-    printf("index: %d\n", index);
+    // printf("index: %d\n", index);
     char input_path[BUFF_SIZE];
     snprintf(input_path, sizeof(input_path), "%s/%s", dir_path, req_entries[index].file_name);
     FILE *file = fopen(input_path, "rb");
@@ -55,11 +55,11 @@ void *request_handle(void *args)
         close(socket);
         return NULL;
     }
-    printf("made it here\n");
+    // printf("made it here\n");
 
     char output_dir[BUFFER_SIZE];
 
-    printf("made it here 2\n");
+    // printf("made it here 2\n");
 
     snprintf(output_dir, sizeof(output_dir), "%s/%s", output_path, req_entries[index].file_name);
 
@@ -69,15 +69,15 @@ void *request_handle(void *args)
         printf("made it here 5\n");
         perror("Failed to recieve file from server");
     } else {
-        printf("made it here 4\n");
+        // printf("made it here 4\n");
     }
 
-    printf("made it here 3\n");
+    // printf("made it here 3\n");
     // Cleanup
     fclose(file);
     close(socket);
 
-    printf("client thread %d is about to exit\n", req_entries[index].number_worker);
+    // printf("client thread %d is about to exit\n", req_entries[index].number_worker);
 
     return NULL;
 }

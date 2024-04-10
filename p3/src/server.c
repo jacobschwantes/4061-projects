@@ -121,24 +121,26 @@ database_entry_t image_match(char *input_image, int size)
 {
   const char *closest_file = NULL;
   int closest_distance = INT_MAX;
-  int closest_index = 0;
   int closest_file_size = INT_MAX; // ADD THIS VARIABLE
+  int closest_index = 0;
   for (int i = 0; i < image_count; i++)
   {
-    const char *current_file = database[i].buffer; /* TODO: assign to the buffer from the database struct*/
+    const char *current_file = database[i].buffer;
     int result = memcmp(input_image, current_file, size);
     if (result == 0)
     {
       return database[i];
     }
+
     else if (result < closest_distance || (result == closest_distance && database[i].file_size < closest_file_size))
     {
       closest_distance = result;
       closest_file = current_file;
       closest_index = i;
-      closest_file_size = database[i].file_size; // ADD THIS LINE
+      closest_file_size = database[i].file_size;
     }
   }
+
   if (closest_file != NULL)
   {
     return database[closest_index];
@@ -160,18 +162,21 @@ database_entry_t image_match(char *input_image, int size)
 ************************************************/
 void LogPrettyPrint(FILE *to_write, int threadId, int requestNumber, char *file_name, int file_size, int socket_fd)
 {
+  char buffer[1024]; // Adjust the size as needed
 
-  
+  // Format the string using sprintf
+  sprintf(buffer, "[%d][%d][%d][%s][%d]\n", threadId, requestNumber, socket_fd, file_name, file_size);
 
   if (to_write != NULL)
   {
-    // Write to the file
-    fprintf(to_write, "[%d][%d][%d][%s][%d]\n", threadId, requestNumber, socket_fd, file_name, file_size);
+    // Write to the file using fwrite
+    fwrite(buffer, 1, strlen(buffer), to_write);
+    fflush(to_write);
   }
   else
   {
     // Print to the terminal
-    printf("[%d][%d][%d][%s][%d]\n", threadId, requestNumber, socket_fd, file_name, file_size);
+    printf("%s", buffer);
   }
 }
 /*
@@ -241,7 +246,7 @@ void loadDatabase(char *path)
     }
 
     size_t bytes_read = fread(database[image_count].buffer, 1, file_size, file);
-    printf("bytes read into database at index %d : %d\n", image_count, bytes_read);
+    // printf("bytes read into database at index %d : %d\n", image_count, bytes_read);
     if (bytes_read != file_size)
     {
       perror("fread failed");
@@ -297,7 +302,7 @@ void *dispatch(void *arg)
     {
       pthread_cond_wait(&req_queue_notfull, &req_queue_mutex);
     }
-    printf("socket fd 2: %d\n", request.file_descriptor);
+    // printf("socket fd 2: %d\n", request.file_descriptor);
     //(4) Insert the request into the queue
     enqueue(request);
     //(5) Update the queue index in a circular fashion
@@ -305,7 +310,7 @@ void *dispatch(void *arg)
     //(6) Release the lock on the request queue and signal that the queue is not empty anymore
     pthread_cond_signal(&req_queue_notempty);
     pthread_mutex_unlock(&req_queue_mutex);
-    return NULL;
+    // return NULL;
   }
 }
 
@@ -350,20 +355,23 @@ void *worker(void *arg)
      */
     database_entry_t match = image_match(request.buffer, request.file_size);
     pthread_mutex_lock(&log_mutex);
+    printf("about to send file with size %d\n", match.file_size);
     if (send_file_to_client(request.file_descriptor, match.buffer, match.file_size) < 0)
     {
       LogPrettyPrint(logfile, ID, num_request, match.file_name, -1, request.file_descriptor);
       LogPrettyPrint(NULL, ID, num_request, match.file_name, -1, request.file_descriptor);
       perror("Failed to send file to client.");
-    } else {
+    }
+    else
+    {
       LogPrettyPrint(logfile, ID, num_request, match.file_name, match.file_size, request.file_descriptor);
       LogPrettyPrint(NULL, ID, num_request, match.file_name, match.file_size, request.file_descriptor);
     }
 
-    // TODO: pretty print
     pthread_mutex_unlock(&log_mutex);
-    printf("about to exit thread: %d\n", ID);
-    return NULL;
+    // printf("about to exit thread: %d\n", ID);
+
+    //  return NULL;
   }
 }
 
