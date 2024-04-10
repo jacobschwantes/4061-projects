@@ -5,6 +5,7 @@ int port = 0;
 pthread_t worker_thread[100];
 int worker_thread_id = 0;
 char output_path[1028];
+char dir_path[1028];
 
 processing_args_t req_entries[100];
 
@@ -22,7 +23,9 @@ void *request_handle(void *args)
 {
     int index = *((int *)args);
     printf("index: %d\n", index);
-    FILE *file = fopen(req_entries[index].file_name, "rb");
+    char input_path[BUFF_SIZE];
+    snprintf(input_path, sizeof(input_path), "%s/%s", dir_path, req_entries[index].file_name);
+    FILE *file = fopen(input_path, "rb");
     if (!file)
     {
         perror("Failed to open file");
@@ -106,7 +109,7 @@ void directory_trav(char *path)
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
         req_entries[worker_thread_id].file_name = malloc(BUFF_SIZE);
-        sprintf(req_entries[worker_thread_id].file_name, "%s/%s", path, entry->d_name);
+        sprintf(req_entries[worker_thread_id].file_name, "%s", entry->d_name);
         printf("filepath in dir traversal: %s\n", req_entries[worker_thread_id].file_name);
         worker_thread_ids[worker_thread_id] = worker_thread_id;
         int worker_result;
@@ -131,7 +134,7 @@ int main(int argc, char *argv[])
      * 1. Get the input args --> (1) directory path (2) Server Port (3) output path
      */
 
-    char dir_path[BUFF_SIZE] = "no path set\0";
+
     strcpy(dir_path, argv[1]);
     strcpy(output_path, argv[3]);
     port = atoi(argv[2]);
