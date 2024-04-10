@@ -51,10 +51,16 @@ Run the client
 
 ## Assumptions
 
-- Server is meant to be ran with a number of worker and dispatcher threads equal to the number of requests the client will send. Otherwise the server will keep waiting for incoming requests that never come since the client only creates one thread/request for each image in the input directory.
+- A failed server to client response will log and print for the bytes sent entry a -1. 
 
 ## Notes
 
 Program was tested on machine `csel-kh1250-23.cselabs.umn.edu`.
 
 We plan on using using mutex locks to protect when adding items to the queue and removing them. We also will use mutex conditionals and signals to wake workers to process items in the queue.
+
+
+## How could you enable your program to make EACH individual request parallelized?
+
+We could use a similar system that the server uses where we first create a pool of client threads to consume requests we insert into a queue to then send each request to the server and receive the response. Right now we are sequentially creating threads as we reach each file from the input directory. In the new system we would create threads first, then read in files and insert to the queue. 
+
