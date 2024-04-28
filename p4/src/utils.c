@@ -150,7 +150,7 @@ int send_file_to_client(int socket, char *buffer, int size)
 {
   // TODO: create a packet_t to hold the packet data
   packet_t packet;
-  packet.size = size;
+  packet.size = htonl(size);
 
   // TODO: send the file size packet
   if (send(socket, &packet, sizeof(packet), 0) < 0)
@@ -195,58 +195,46 @@ char *get_request_server(int fd, size_t *filelength)
   // TODO: return the buffer
 
   // Create a packet_t to hold the packet data
-  packet_t packet;
+    packet_t packet;
 
-  // Receive the response packet
-  int n = recv(fd, &packet, sizeof(packet), 0);
-  if (n <= 0)
-  {
-    if (n == 0)
-    {
-      printf("Connection closed by peer\n");
+    // Receive the response packet
+    int n = recv(fd, &packet, sizeof(packet), 0);
+    if (n <= 0) {
+        if (n == 0) {
+            printf("Connection closed by peer\n");
+        } else {
+            perror("Failed to receive packet");
+        }
+        return NULL;
     }
-    else
-    {
-      perror("Failed to receive packet");
-    }
-    return NULL;
-  }
-
-  printf("recv packet in get request server with size: %d\n", packet.size);
 
     // Get the size of the file from the packet
-  *filelength = packet.size;
+    *filelength = ntohl(packet.size);
 
-  // Allocate memory for the file data
-  char *buffer = malloc(packet.size);
-  if (buffer == NULL)
-  {
-    perror("Failed to allocate memory for file data");
-    return NULL;
-  }
-
-  // Receive the file data and save into buffer
-  int bytes_received = 0;
-
-    n = recv(fd, buffer, sizeof(packet.size), 0);
-    if (n <= 0)
-    {
-      if (n == 0)
-      {
-        printf("Connection closed by peer during file reception\n");
-      }
-      else
-      {
-        perror("Failed to receive file data");
-      }
-      printf("failed in get req server\n");
-      free(buffer);
-      return NULL;
+    // Allocate memory for the file data
+    char *buffer = malloc(*filelength);
+    if (buffer == NULL) {
+        perror("Failed to allocate memory for file data");
+        return NULL;
     }
-  
-  
 
-  return buffer;
+    // Receive the file data and save into buffer
+    int bytes_received = 0;
+    while (bytes_received < *filelength) {
+        n = recv(fd, buffer + bytes_received, *filelength - bytes_received, 0);
+        if (n <= 0) {
+            if (n == 0) {
+                printf("Connection closed by peer during file reception\n");
+            } else {
+                perror("Failed to receive file data");
+            }
+            free(buffer);
+            return NULL;
+        }
+        bytes_received += n;
+    }
+
+    return buffer;
 }
 
 /*
@@ -319,7 +307,7 @@ int send_file_to_server(int socket, FILE *file, int size)
   // TODO: return 0 on success, -1 on failure
   // Send the file size packet
   packet_t packet;
-  packet.size = size;
+  packet.size = htonl(size);
   printf("size of packet in send file to server: %d\n", packet.size);
   printf("size in send file to server: %d\n", size);
   if (send(socket, &packet, sizeof(packet), 0) < 0)
@@ -357,7 +345,7 @@ int send_file_to_server(int socket, FILE *file, int size)
 
   // printf("bytes sent: %d\n", bytes_sent);
 
-  // free(buffer);
+  free(buffer);
   return 0; // Success
 }
 
@@ -393,7 +381,7 @@ int receive_file_from_server(int socket, const char *filename)
   }
 
   // Get the size of the file from the packet
-  unsigned int size = packet.size;
+  unsigned int size = ntohl(packet.size);
 
   // Open the file for writing binary data
   FILE *file = fopen(filename, "wb");
